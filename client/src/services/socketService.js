@@ -12,27 +12,36 @@ class SocketService {
       this.disconnect();
     }
 
-    const serverURL = import.meta.env.VITE_SOCKET_URL || window.location.origin;
-    
+    // Prefer explicit VITE_SOCKET_URL; fallback to same-origin (http://localhost:5173) but point to :3000 server
+    const serverURL = import.meta.env.VITE_SOCKET_URL || `${window.location.protocol}//${window.location.hostname}:3000`;
+
     this.socket = io(serverURL, {
       auth: { token },
       transports: ['websocket', 'polling'],
       upgrade: true,
-      rememberUpgrade: true
+      rememberUpgrade: true,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 500,
+      timeout: 10000
     });
 
     this.socket.on('connect', () => {
-      console.log('🔗 Connected to P2P server');
+      console.log('🔗 Connected to P2P server', { url: serverURL, id: this.socket.id });
       this.isConnected = true;
     });
 
-    this.socket.on('disconnect', () => {
-      console.log('📡 Disconnected from P2P server');
-      this.isConnected = false;
+    this.socket.on('connect_error', (err) => {
+      console.error('🚨 Socket connect_error:', err?.message || err);
     });
 
     this.socket.on('error', (error) => {
       console.error('🚨 Socket error:', error);
+    });
+
+    this.socket.on('disconnect', (reason) => {
+      console.warn('📡 Disconnected from P2P server', { reason });
+      this.isConnected = false;
     });
 
     // Re-attach existing listeners
