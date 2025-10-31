@@ -54,9 +54,10 @@ const usernameValidation = body('username')
     return true;
   });
 
-// TOTP code validation
+// TOTP code validation (conditional)
+// checkFalsy allows empty string to be treated as "not provided"
 const totpValidation = body('totpCode')
-  .optional()
+  .optional({ nullable: true, checkFalsy: true })
   .isLength({ min: 6, max: 6 })
   .withMessage('TOTP code must be exactly 6 digits')
   .isNumeric()
