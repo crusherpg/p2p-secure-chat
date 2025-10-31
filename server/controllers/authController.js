@@ -1,20 +1,66 @@
-const User = require('../models/User');
-const jwt = require('jsonwebtoken');
-const speakeasy = require('speakeasy');
-const QRCode = require('qrcode');
-const crypto = require('crypto');
-const { validationResult } = require('express-validator');
+/**
+ * Authentication Controller for P2P Secure Chat
+ * Updated to 2025 coding standards with modern async/await patterns
+ * and comprehensive error handling
+ */
 
-// Generate JWT token
-const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, {
-    expiresIn: '24h',
-    issuer: 'P2P-Chat',
-    audience: 'P2P-Client'
-  });
+import User from '../models/User.js';
+import jwt from 'jsonwebtoken';
+import speakeasy from 'speakeasy';
+import QRCode from 'qrcode';
+import crypto from 'crypto';
+import { validationResult } from 'express-validator';
+import argon2 from 'argon2';
+
+/**
+ * Validates that JWT_SECRET is properly configured
+ * @returns {string} The JWT secret
+ * @throws {Error} If JWT_SECRET is not configured
+ */
+const getJWTSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error(
+      'JWT_SECRET environment variable is required and must be at least 32 characters long. ' +
+      'Please check your .env file and ensure JWT_SECRET is properly configured.'
+    );
+  }
+  return secret;
 };
 
-// Generate backup codes
+/**
+ * Generates a JWT token for user authentication
+ * @param {string} userId - The user's database ID
+ * @param {string} [expiresIn='24h'] - Token expiration time
+ * @returns {string} Signed JWT token
+ */
+const generateToken = (userId, expiresIn = '24h') => {
+  try {
+    const secret = getJWTSecret();
+    return jwt.sign(
+      { 
+        userId, 
+        type: 'access',
+        iat: Math.floor(Date.now() / 1000)
+      }, 
+      secret,
+      {
+        expiresIn: process.env.JWT_EXPIRES_IN || expiresIn,
+        issuer: 'P2P-Secure-Chat',
+        audience: 'P2P-Client',
+        algorithm: 'HS256'
+      }
+    );
+  } catch (error) {
+    console.error('❌ JWT Generation Error:', error);
+    throw new Error('Failed to generate authentication token');
+  }
+};
+
+/**
+ * Generates cryptographically secure backup codes for 2FA
+ * @returns {Array<{code: string, used: boolean}>} Array of backup codes
+ */
 const generateBackupCodes = () => {
   const codes = [];
   for (let i = 0; i < 10; i++) {
@@ -26,73 +72,159 @@ const generateBackupCodes = () => {
   return codes;
 };
 
-// Register new user
-exports.register = async (req, res) => {
+/**
+ * Validates and sanitizes user input for registration/login
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Object|null} Validation errors or null if valid
+ */
+const validateInput = (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid input data',
+      errors: errors.array().map(err => ({
+        field: err.param,
+        message: err.msg,
+        value: err.value
+      }))
+    });
+  }
+  return null;
+};
+
+/**
+ * Register a new user with enhanced security
+ * @route POST /api/auth/register
+ */
+export const register = async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
+    // Validate input
+    const validationError = validateInput(req, res);
+    if (validationError) return;
 
     const { email, username, password } = req.body;
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    // Check for existing user
+    const existingUser = await User.findOne({
+      $or: [
+        { email: email.toLowerCase() },
+        { username: { $regex: new RegExp(`^${username}$`, 'i') } }
+      ]
+    });
+
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(409).json({
+        success: false,
+        message: existingUser.email === email.toLowerCase() 
+          ? 'Email address is already registered'
+          : 'Username is already taken'
+      });
     }
+
+    // Hash password with Argon2 (2025 standard)
+    const hashedPassword = await argon2.hash(password, {
+      type: argon2.argon2id,
+      memoryCost: 2 ** 16,
+      timeCost: 3,
+      parallelism: 1,
+    });
 
     // Create new user
     const user = new User({
-      email,
-      username,
-      password
+      email: email.toLowerCase().trim(),
+      username: username.trim(),
+      password: hashedPassword,
+      preferences: {
+        theme: 'dark',
+        notifications: true,
+        readReceipts: true,
+        typingIndicators: true
+      }
     });
 
     await user.save();
 
-    // Generate JWT token
-    const token = generateToken(user._id);
+    // Generate authentication token
+    const token = generateToken(user._id.toString());
 
+    // Log successful registration
     console.log(`🎉 New user registered: ${username} (${email})`);
 
+    // Return success response (excluding sensitive data)
     res.status(201).json({
       success: true,
-      message: 'User registered successfully',
+      message: 'Account created successfully! Welcome to P2P Secure Chat.',
       token,
       user: {
         id: user._id,
         email: user.email,
         username: user.username,
-        totpEnabled: user.totpEnabled
+        totpEnabled: user.totpEnabled,
+        preferences: user.preferences,
+        createdAt: user.createdAt
       }
     });
+
   } catch (error) {
     console.error('❌ Registration error:', error);
-    res.status(500).json({ message: 'Server error during registration' });
+    
+    // Handle specific database errors
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        details: Object.values(error.errors).map(err => err.message)
+      });
+    }
+    
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: 'Email or username already exists'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Registration failed. Please try again.',
+      ...(process.env.NODE_ENV === 'development' && { error: error.message })
+    });
   }
 };
 
-// Login user
-exports.login = async (req, res) => {
+/**
+ * Authenticate user login with 2FA support
+ * @route POST /api/auth/login
+ */
+export const login = async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
+    // Validate input
+    const validationError = validateInput(req, res);
+    if (validationError) return;
 
     const { email, password, totpCode } = req.body;
 
-    // Find user
-    const user = await User.findOne({ email });
+    // Find user with case-insensitive email
+    const user = await User.findOne({ 
+      email: email.toLowerCase().trim() 
+    }).select('+password +totpSecret +backupCodes');
+
     if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password'
+      });
     }
 
-    // Check password
-    const isPasswordValid = await user.comparePassword(password);
+    // Verify password with Argon2
+    const isPasswordValid = await argon2.verify(user.password, password);
     if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password'
+      });
     }
 
     // Check TOTP if enabled
@@ -101,119 +233,158 @@ exports.login = async (req, res) => {
         return res.status(200).json({
           success: false,
           requiresTOTP: true,
-          message: 'TOTP code required'
+          message: '2FA verification required'
         });
       }
 
       const verified = speakeasy.totp.verify({
         secret: user.totpSecret,
         encoding: 'base32',
-        token: totpCode,
+        token: totpCode.replace(/\s/g, ''),
         window: 2
       });
 
       if (!verified) {
-        return res.status(401).json({ message: 'Invalid TOTP code' });
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid 2FA code'
+        });
       }
     }
 
-    // Update user status
-    user.status = 'online';
-    user.lastSeen = new Date();
-    await user.save();
+    // Update user status and last login
+    await User.findByIdAndUpdate(user._id, {
+      status: 'online',
+      lastSeen: new Date(),
+      $push: {
+        sessions: {
+          token: generateToken(user._id).substring(0, 20) + '...',
+          device: req.headers['user-agent'] || 'Unknown Device',
+          ipAddress: req.ip || req.connection.remoteAddress,
+          lastActive: new Date()
+        }
+      }
+    });
 
-    // Generate JWT token
-    const token = generateToken(user._id);
-
-    // Store session information
-    const sessionInfo = {
-      token: token.substring(0, 20) + '...',
-      device: req.headers['user-agent'] || 'Unknown',
-      ipAddress: req.ip,
-      lastActive: new Date()
-    };
-    
-    user.sessions.push(sessionInfo);
+    // Clean expired sessions
     await user.cleanExpiredSessions();
+
+    // Generate authentication token
+    const token = generateToken(user._id.toString());
 
     console.log(`🔐 User logged in: ${user.username}`);
 
     res.json({
       success: true,
-      message: 'Login successful',
+      message: `Welcome back, ${user.username}!`,
       token,
       user: {
         id: user._id,
         email: user.email,
         username: user.username,
-        status: user.status,
+        status: 'online',
         totpEnabled: user.totpEnabled,
-        preferences: user.preferences
+        preferences: user.preferences,
+        lastSeen: user.lastSeen
       }
     });
+
   } catch (error) {
     console.error('❌ Login error:', error);
-    res.status(500).json({ message: 'Server error during login' });
+    res.status(500).json({
+      success: false,
+      message: 'Login failed. Please try again.',
+      ...(process.env.NODE_ENV === 'development' && { error: error.message })
+    });
   }
 };
 
-// Setup TOTP
-exports.setupTOTP = async (req, res) => {
+/**
+ * Setup Two-Factor Authentication (TOTP)
+ * @route POST /api/auth/totp/setup
+ */
+export const setupTOTP = async (req, res) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId);
 
-    if (user.totpEnabled) {
-      return res.status(400).json({ message: 'TOTP already enabled' });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
     }
 
-    // Generate secret
+    if (user.totpEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: '2FA is already enabled for this account'
+      });
+    }
+
+    // Generate TOTP secret
     const secret = speakeasy.generateSecret({
       name: `P2P Secure Chat (${user.email})`,
-      issuer: 'P2P Secure Chat'
+      issuer: 'P2P Secure Chat',
+      length: 32
     });
 
-    // Temporarily store the secret
+    // Store secret temporarily (will be confirmed during verification)
     user.totpSecret = secret.base32;
     await user.save();
 
     // Generate QR code
     const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url);
 
-    console.log(`🔑 TOTP setup initiated for: ${user.username}`);
+    console.log(`🔐 TOTP setup initiated for: ${user.username}`);
 
     res.json({
       success: true,
       secret: secret.base32,
       qrCode: qrCodeUrl,
-      manualEntry: secret.base32
+      manualEntry: secret.base32,
+      issuer: 'P2P Secure Chat'
     });
+
   } catch (error) {
     console.error('❌ TOTP setup error:', error);
-    res.status(500).json({ message: 'Server error during TOTP setup' });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to setup 2FA. Please try again.'
+    });
   }
 };
 
-// Verify and enable TOTP
-exports.verifyTOTP = async (req, res) => {
+/**
+ * Verify TOTP code and enable 2FA
+ * @route POST /api/auth/totp/verify
+ */
+export const verifyTOTP = async (req, res) => {
   try {
     const { totpCode } = req.body;
     const userId = req.user.id;
     const user = await User.findById(userId);
 
-    if (!user.totpSecret) {
-      return res.status(400).json({ message: 'TOTP not set up' });
+    if (!user || !user.totpSecret) {
+      return res.status(400).json({
+        success: false,
+        message: 'TOTP setup not found. Please restart the setup process.'
+      });
     }
 
+    // Verify TOTP code
     const verified = speakeasy.totp.verify({
       secret: user.totpSecret,
       encoding: 'base32',
-      token: totpCode,
+      token: totpCode.replace(/\s/g, ''),
       window: 2
     });
 
     if (!verified) {
-      return res.status(400).json({ message: 'Invalid TOTP code' });
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid verification code. Please try again.'
+      });
     }
 
     // Enable TOTP and generate backup codes
@@ -221,62 +392,111 @@ exports.verifyTOTP = async (req, res) => {
     user.backupCodes = generateBackupCodes();
     await user.save();
 
-    console.log(`✅ TOTP enabled for: ${user.username}`);
+    console.log(`✅ 2FA enabled for: ${user.username}`);
 
     res.json({
       success: true,
-      message: 'TOTP enabled successfully',
+      message: '2FA has been successfully enabled!',
       backupCodes: user.backupCodes.map(bc => bc.code)
     });
+
   } catch (error) {
     console.error('❌ TOTP verification error:', error);
-    res.status(500).json({ message: 'Server error during TOTP verification' });
+    res.status(500).json({
+      success: false,
+      message: 'Verification failed. Please try again.'
+    });
   }
 };
 
-// Logout
-exports.logout = async (req, res) => {
+/**
+ * Logout user and clean session
+ * @route POST /api/auth/logout
+ */
+export const logout = async (req, res) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId);
 
-    // Update user status
-    user.status = 'offline';
-    user.lastSeen = new Date();
-    
-    // Remove current session
-    const authToken = req.headers.authorization?.split(' ')[1];
-    if (authToken) {
-      const tokenPrefix = authToken.substring(0, 20) + '...';
-      user.sessions = user.sessions.filter(session => session.token !== tokenPrefix);
+    if (user) {
+      // Update user status
+      user.status = 'offline';
+      user.lastSeen = new Date();
+      
+      // Remove current session
+      const authToken = req.headers.authorization?.split(' ')[1];
+      if (authToken) {
+        const tokenPrefix = authToken.substring(0, 20) + '...';
+        user.sessions = user.sessions.filter(session => session.token !== tokenPrefix);
+      }
+
+      await user.save();
+      console.log(`👋 User logged out: ${user.username}`);
     }
-
-    await user.save();
-
-    console.log(`👋 User logged out: ${user.username}`);
 
     res.json({
       success: true,
-      message: 'Logout successful'
+      message: 'Logged out successfully'
     });
+
   } catch (error) {
     console.error('❌ Logout error:', error);
-    res.status(500).json({ message: 'Server error during logout' });
+    // Always return success for logout to ensure client-side cleanup
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    });
   }
 };
 
-// Get user profile
-exports.getProfile = async (req, res) => {
+/**
+ * Get user profile information
+ * @route GET /api/auth/profile
+ */
+export const getProfile = async (req, res) => {
   try {
     const userId = req.user.id;
-    const user = await User.findById(userId).select('-password -totpSecret -sessions');
+    const user = await User.findById(userId)
+      .select('-password -totpSecret -sessions -backupCodes');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User profile not found'
+      });
+    }
 
     res.json({
       success: true,
-      user
+      user: {
+        id: user._id,
+        email: user.email,
+        username: user.username,
+        avatar: user.avatar,
+        status: user.status,
+        lastSeen: user.lastSeen,
+        totpEnabled: user.totpEnabled,
+        preferences: user.preferences,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      }
     });
+
   } catch (error) {
     console.error('❌ Get profile error:', error);
-    res.status(500).json({ message: 'Server error getting profile' });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve profile information'
+    });
   }
+};
+
+// Export all controller functions
+export default {
+  register,
+  login,
+  setupTOTP,
+  verifyTOTP,
+  logout,
+  getProfile
 };
