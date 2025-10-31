@@ -1,17 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { 
-  User, 
-  Settings, 
-  LogOut, 
-  Shield, 
-  Moon, 
-  Sun, 
-  ChevronDown,
-  Bell,
-  Lock
-} from 'lucide-react';
+import { User, Settings, LogOut, Shield, Moon, Sun, ChevronDown, Bell, Lock } from 'lucide-react';
 import LoadingSpinner from './LoadingSpinner';
 
 const UserMenu = () => {
@@ -24,8 +14,7 @@ const UserMenu = () => {
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target) &&
-          buttonRef.current && !buttonRef.current.contains(event.target)) {
+      if (menuRef.current && !menuRef.current.contains(event.target) && buttonRef.current && !buttonRef.current.contains(event.target)) {
         setIsOpen(false);
       }
     };
@@ -35,11 +24,12 @@ const UserMenu = () => {
   }, []);
 
   const handleLogout = async () => {
+    console.log('[UserMenu] Logout clicked');
     setIsLoggingOut(true);
     try {
       await logout();
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('[UserMenu] Logout error:', error);
     } finally {
       setIsLoggingOut(false);
       setIsOpen(false);
@@ -47,23 +37,28 @@ const UserMenu = () => {
   };
 
   const toggleMenu = () => {
-    setIsOpen(!isOpen);
+    const next = !isOpen;
+    console.log('[UserMenu] toggleMenu', { next });
+    setIsOpen(next);
+  };
+
+  const onProfileSettings = () => {
+    console.log('[UserMenu] Profile settings clicked', { user });
+    // Placeholder – opens future profile modal/page
   };
 
   const MenuItem = ({ icon: Icon, label, onClick, danger = false, disabled = false }) => (
     <button
       onClick={() => {
-        onClick();
+        try {
+          onClick?.();
+        } catch (e) {
+          console.error('[UserMenu] MenuItem onClick error', e);
+        }
         if (!disabled) setIsOpen(false);
       }}
       disabled={disabled}
-      className={`w-full flex items-center space-x-3 px-4 py-3 text-left transition-colors ${
-        danger
-          ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20'
-          : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-dark-600'
-      } ${
-        disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50 dark:hover:bg-dark-600'
-      }`}
+      className={`w-full flex items-center space-x-3 px-4 py-3 text-left transition-colors ${danger ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20' : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-dark-600'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50 dark:hover:bg-dark-600'}`}
     >
       <Icon className="w-5 h-5 flex-shrink-0" />
       <span className="flex-1">{label}</span>
@@ -73,74 +68,38 @@ const UserMenu = () => {
 
   return (
     <div className="relative">
-      {/* User Avatar Button */}
-      <button
-        ref={buttonRef}
-        onClick={toggleMenu}
-        className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-dark-800"
-        aria-expanded={isOpen}
-        aria-haspopup="true"
-      >
-        {/* Avatar */}
+      <button ref={buttonRef} onClick={toggleMenu} className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-dark-800" aria-expanded={isOpen} aria-haspopup="true">
         <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center flex-shrink-0">
           {user?.avatar ? (
-            <img
-              src={user.avatar}
-              alt={user.username}
-              className="w-8 h-8 rounded-full object-cover"
-            />
+            <img src={user.avatar} alt={user?.username || 'User'} className="w-8 h-8 rounded-full object-cover" />
           ) : (
-            <span className="text-white text-sm font-medium">
-              {user?.username?.[0]?.toUpperCase() || 'U'}
-            </span>
+            <span className="text-white text-sm font-medium">{user?.username?.[0]?.toUpperCase() || 'U'}</span>
           )}
         </div>
-
-        {/* User Info (Hidden on mobile) */}
         <div className="hidden md:block min-w-0">
-          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-            {user?.username || 'User'}
-          </p>
+          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{user?.username || 'User'}</p>
           <div className="flex items-center space-x-1">
             <div className="w-2 h-2 bg-green-500 rounded-full" />
             <span className="text-xs text-gray-500 dark:text-gray-400">Online</span>
           </div>
         </div>
-
-        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${
-          isOpen ? 'rotate-180' : ''
-        }`} />
+        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {/* Dropdown Menu */}
       {isOpen && (
-        <div
-          ref={menuRef}
-          className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-dark-800 rounded-lg shadow-lg border border-gray-200 dark:border-dark-700 py-2 z-50 fade-in"
-        >
-          {/* User Info Header */}
+        <div ref={menuRef} className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-dark-800 rounded-lg shadow-lg border border-gray-200 dark:border-dark-700 py-2 z-50 fade-in">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-dark-700">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center flex-shrink-0">
                 {user?.avatar ? (
-                  <img
-                    src={user.avatar}
-                    alt={user.username}
-                    className="w-10 h-10 rounded-full object-cover"
-                  />
+                  <img src={user.avatar} alt={user?.username || 'User'} className="w-10 h-10 rounded-full object-cover" />
                 ) : (
-                  <span className="text-white font-medium">
-                    {user?.username?.[0]?.toUpperCase() || 'U'}
-                  </span>
+                  <span className="text-white font-medium">{user?.username?.[0]?.toUpperCase() || 'U'}</span>
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                  {user?.username || 'Unknown User'}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                  {user?.email || 'No email'}
-                </p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{user?.username || 'Unknown User'}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user?.email || 'No email'}</p>
                 <div className="flex items-center space-x-2 mt-1">
                   <div className="flex items-center space-x-1">
                     <div className="w-2 h-2 bg-green-500 rounded-full" />
@@ -157,59 +116,22 @@ const UserMenu = () => {
             </div>
           </div>
 
-          {/* Menu Items */}
           <div className="py-2">
-            <MenuItem
-              icon={User}
-              label="Profile Settings"
-              onClick={() => console.log('Profile settings')}
-            />
-            
-            <MenuItem
-              icon={Bell}
-              label="Notifications"
-              onClick={() => console.log('Notifications')}
-            />
-            
-            <MenuItem
-              icon={Lock}
-              label="Privacy & Security"
-              onClick={() => console.log('Privacy settings')}
-            />
-            
-            {/* Theme Toggle */}
-            <MenuItem
-              icon={isDark ? Sun : Moon}
-              label={isDark ? 'Light Mode' : 'Dark Mode'}
-              onClick={toggleTheme}
-            />
-            
-            <MenuItem
-              icon={Settings}
-              label="Settings"
-              onClick={() => console.log('Settings')}
-            />
+            <MenuItem icon={User} label="Profile Settings" onClick={onProfileSettings} />
+            <MenuItem icon={Bell} label="Notifications" onClick={() => console.log('[UserMenu] Notifications clicked')} />
+            <MenuItem icon={Lock} label="Privacy & Security" onClick={() => console.log('[UserMenu] Privacy clicked')} />
+            <MenuItem icon={isDark ? Sun : Moon} label={isDark ? 'Light Mode' : 'Dark Mode'} onClick={toggleTheme} />
+            <MenuItem icon={Settings} label="Settings" onClick={() => console.log('[UserMenu] Settings clicked')} />
           </div>
 
-          {/* Divider */}
           <div className="border-t border-gray-200 dark:border-dark-700 my-2" />
 
-          {/* Logout */}
           <div className="py-2">
-            <MenuItem
-              icon={LogOut}
-              label={isLoggingOut ? 'Signing out...' : 'Sign Out'}
-              onClick={handleLogout}
-              danger
-              disabled={isLoggingOut}
-            />
+            <MenuItem icon={LogOut} label={isLoggingOut ? 'Signing out...' : 'Sign Out'} onClick={handleLogout} danger disabled={isLoggingOut} />
           </div>
 
-          {/* App Version Info */}
           <div className="px-4 py-2 border-t border-gray-200 dark:border-dark-700">
-            <p className="text-xs text-gray-400 dark:text-gray-500">
-              P2P Secure Chat v1.1.0
-            </p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">P2P Secure Chat v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'} · {typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : ''}</p>
           </div>
         </div>
       )}
