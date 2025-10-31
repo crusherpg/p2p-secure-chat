@@ -1,89 +1,223 @@
+/* P2P Secure Chat - Global Styles (2025 Standards) */
+
+/* Import Google Fonts first */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* Tailwind CSS directives */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* CSS Reset and Base Styles */
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+  html {
+    font-size: 16px;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    background-color: theme(colors.gray.50);
+  }
+
+  .dark body {
+    background-color: theme(colors.slate.900);
+  }
+
+  /* Prevent zoom on iOS when focusing inputs */
+  input, textarea, select {
+    font-size: 16px;
+  }
 }
 
-body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* Custom Components */
+@layer components {
+  /* Custom scrollbar styling */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: theme(colors.gray.400) transparent;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: theme(colors.gray.400);
+    border-radius: 3px;
+    transition: background-color 0.2s ease;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: theme(colors.gray.500);
+  }
+  
+  .dark .custom-scrollbar {
+    scrollbar-color: theme(colors.slate.600) transparent;
+  }
+  
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: theme(colors.slate.600);
+  }
+  
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: theme(colors.slate.500);
+  }
+
+  /* Message bubble styling */
+  .message-bubble {
+    @apply max-w-xs sm:max-w-sm md:max-w-md lg:max-w-lg xl:max-w-xl;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* Media picker mobile optimization */
+  .media-picker {
+    @apply md:max-w-md;
+  }
+
+  @media (max-width: 768px) {
+    .media-picker {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      border-radius: 16px 16px 0 0;
+      max-height: 60vh;
+      z-index: 50;
+    }
+  }
+
+  /* Button base styles */
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+  }
+
+  .btn-secondary {
+    @apply bg-gray-200 hover:bg-gray-300 text-gray-900 font-medium px-4 py-2 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2;
+  }
+
+  .dark .btn-secondary {
+    @apply bg-slate-700 hover:bg-slate-600 text-white;
+  }
+
+  /* Input base styles */
+  .input-primary {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-500 transition-colors duration-200;
+  }
+
+  .dark .input-primary {
+    @apply border-slate-600 bg-slate-700 text-white placeholder-slate-400;
+  }
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
+/* Utility Classes */
+@layer utilities {
+  /* Animation classes */
+  .fade-in {
+    animation: fadeIn 0.2s ease-in-out;
+  }
+
+  .slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  .pulse-soft {
+    animation: pulseSoft 2s infinite;
+  }
+
+  .recording-pulse {
+    animation: recordingPulse 1s infinite;
+  }
+
+  .message-slide-in {
+    animation: messageSlideIn 0.3s ease-out;
+  }
+
+  /* Typing indicator */
+  .typing-dot {
+    animation: typingDot 1.4s infinite ease-in-out;
+  }
+
+  .typing-dot:nth-child(1) { 
+    animation-delay: -0.32s; 
+  }
+  
+  .typing-dot:nth-child(2) { 
+    animation-delay: -0.16s; 
+  }
+
+  /* Mobile-specific utilities */
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+
+  .safe-area-inset {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  .safe-area-inset-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-area-inset-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(156, 163, 175, 0.3);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(156, 163, 175, 0.5);
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  background: rgba(75, 85, 99, 0.3);
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(75, 85, 99, 0.5);
-}
-
-/* Animation classes */
-.fade-in {
-  animation: fadeIn 0.2s ease-in-out;
-}
-
-.slide-up {
-  animation: slideUp 0.3s ease-out;
-}
-
-.pulse-soft {
-  animation: pulseSoft 2s infinite;
-}
-
+/* Keyframe Animations */
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from { 
+    opacity: 0; 
+  }
+  to { 
+    opacity: 1; 
+  }
 }
 
 @keyframes slideUp {
-  from { transform: translateY(10px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from { 
+    transform: translateY(10px); 
+    opacity: 0; 
+  }
+  to { 
+    transform: translateY(0); 
+    opacity: 1; 
+  }
 }
 
 @keyframes pulseSoft {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+  0%, 100% { 
+    opacity: 1; 
+  }
+  50% { 
+    opacity: 0.7; 
+  }
 }
 
-/* Voice recording animation */
-@keyframes pulse-record {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.1); }
-}
-
-.recording-pulse {
-  animation: pulse-record 1s infinite;
-}
-
-/* Message bubble animations */
-.message-slide-in {
-  animation: messageSlideIn 0.3s ease-out;
+@keyframes recordingPulse {
+  0%, 100% { 
+    transform: scale(1); 
+  }
+  50% { 
+    transform: scale(1.1); 
+  }
 }
 
 @keyframes messageSlideIn {
@@ -97,35 +231,119 @@ body {
   }
 }
 
-/* Typing indicator */
-.typing-dot {
-  animation: typingDot 1.4s infinite ease-in-out;
-}
-
-.typing-dot:nth-child(1) { animation-delay: -0.32s; }
-.typing-dot:nth-child(2) { animation-delay: -0.16s; }
-
 @keyframes typingDot {
-  0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
+  0%, 80%, 100% { 
+    transform: scale(0); 
+    opacity: 0.5;
+  }
+  40% { 
+    transform: scale(1); 
+    opacity: 1;
+  }
 }
 
-/* Mobile-specific styles */
-@media (max-width: 768px) {
-  body {
-    font-size: 16px; /* Prevent iOS zoom on input focus */
-  }
-  
+/* Dark mode color scheme */
+:root {
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-900: #1e3a8a;
+}
+
+.dark {
+  --color-primary-50: #1e3a8a;
+  --color-primary-100: #1d4ed8;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #60a5fa;
+  --color-primary-700: #93c5fd;
+  --color-primary-900: #dbeafe;
+}
+
+/* Responsive Design Breakpoints */
+/* Mobile First Approach */
+
+/* Extra small devices (phones, 600px and down) */
+@media only screen and (max-width: 600px) {
   .message-bubble {
     max-width: 85%;
   }
   
+  .chat-input {
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+}
+
+/* Small devices (portrait tablets and large phones, 600px and up) */
+@media only screen and (min-width: 600px) {
+  .message-bubble {
+    max-width: 75%;
+  }
+}
+
+/* Medium devices (landscape tablets, 768px and up) */
+@media only screen and (min-width: 768px) {
+  .message-bubble {
+    max-width: 70%;
+  }
+  
   .media-picker {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    border-radius: 16px 16px 0 0;
-    max-height: 60vh;
+    position: relative;
+    max-height: none;
+    border-radius: 12px;
+  }
+}
+
+/* Large devices (laptops/desktops, 992px and up) */
+@media only screen and (min-width: 992px) {
+  .message-bubble {
+    max-width: 60%;
+  }
+}
+
+/* Extra large devices (large laptops and desktops, 1200px and up) */
+@media only screen and (min-width: 1200px) {
+  .message-bubble {
+    max-width: 50%;
+  }
+}
+
+/* High DPI displays */
+@media only screen and (-webkit-min-device-pixel-ratio: 2), 
+       only screen and (min-resolution: 192dpi) {
+  /* High resolution specific styles */
+  .message-bubble {
+    -webkit-font-smoothing: subpixel-antialiased;
+  }
+}
+
+/* Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Focus visible for keyboard navigation */
+.focus-visible:focus {
+  outline: 2px solid theme(colors.blue.500);
+  outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  .message-bubble {
+    max-width: none;
+    box-shadow: none;
+    border: 1px solid #ccc;
   }
 }
