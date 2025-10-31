@@ -1,67 +1,38 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 
 const ThemeContext = createContext();
-
-export const useTheme = () => {
-  const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error('useTheme must be used within a ThemeProvider');
-  }
-  return context;
-};
+export const useTheme = () => useContext(ThemeContext);
 
 export const ThemeProvider = ({ children }) => {
-  const [isDark, setIsDark] = useState(() => {
-    // Check localStorage first
-    const saved = localStorage.getItem('p2p_theme');
-    if (saved) {
-      return saved === 'dark';
-    }
-    // Default to dark theme or system preference
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
+  const [isDark, setIsDark] = useState(false);
 
+  // Sync with system preference and saved preference
   useEffect(() => {
-    // Apply theme to document
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-
-    // Save to localStorage
-    localStorage.setItem('p2p_theme', isDark ? 'dark' : 'light');
-
-    // Update CSS custom properties for better theme integration
-    const root = document.documentElement;
-    if (isDark) {
-      root.style.setProperty('--toast-bg', '#374151');
-      root.style.setProperty('--toast-color', '#ffffff');
-      root.style.setProperty('--toast-border', '#4b5563');
-    } else {
-      root.style.setProperty('--toast-bg', '#ffffff');
-      root.style.setProperty('--toast-color', '#1f2937');
-      root.style.setProperty('--toast-border', '#e5e7eb');
-    }
-  }, [isDark]);
+    const saved = localStorage.getItem('p2p_theme');
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const dark = saved ? saved === 'dark' : prefersDark;
+    setIsDark(dark);
+    document.documentElement.classList.toggle('dark', dark);
+  }, []);
 
   const toggleTheme = () => {
-    setIsDark(prev => !prev);
+    setIsDark((prev) => {
+      const next = !prev;
+      document.documentElement.classList.toggle('dark', next);
+      localStorage.setItem('p2p_theme', next ? 'dark' : 'light');
+      return next;
+    });
   };
 
-  const setTheme = (theme) => {
-    setIsDark(theme === 'dark');
-  };
-
-  const value = {
-    isDark,
-    theme: isDark ? 'dark' : 'light',
-    toggleTheme,
-    setTheme
+  const setTheme = (mode) => {
+    const next = mode === 'dark' || (mode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.classList.toggle('dark', next);
+    localStorage.setItem('p2p_theme', mode === 'auto' ? (next ? 'dark' : 'light') : mode);
+    setIsDark(next);
   };
 
   return (
-    <ThemeContext.Provider value={value}>
+    <ThemeContext.Provider value={{ isDark, toggleTheme, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );
