@@ -44,11 +44,11 @@ const connectDatabase = async (retries = 5, delay = 5000) => {
       connectTimeoutMS: 10000, // 10 seconds
       
       // Buffer options
-      bufferMaxEntries: 0,
-      bufferCommands: false,
+      // bufferMaxEntries: 0,
+      // bufferCommands: false,
       
       // Authentication options
-      authSource: 'admin',
+      // authSource: 'admin',
       
       // Performance options
       maxPoolSize: 10, // Maintain up to 10 socket connections
@@ -64,8 +64,8 @@ const connectDatabase = async (retries = 5, delay = 5000) => {
       heartbeatFrequencyMS: 10000, // 10 seconds
       
       // Additional security
-      ssl: process.env.MONGO_SSL === 'true',
-      sslValidate: process.env.MONGO_SSL_VALIDATE !== 'false'
+      // ssl: process.env.MONGO_SSL === 'true',
+      // sslValidate: process.env.MONGO_SSL_VALIDATE !== 'false'
     };
 
     const conn = await mongoose.connect(mongoURI, options);
