@@ -6,7 +6,6 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import mongoose from 'mongoose';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -14,9 +13,13 @@ import compression from 'compression';
 import mongoSanitize from 'express-mongo-sanitize';
 import hpp from 'hpp';
 import dotenv from 'dotenv';
-import winston from 'winston';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import fs from 'fs';
+
+// Import configuration and utilities
+import { initializeDatabase, getDatabaseStatus } from './config/database.js';
+import logger from './utils/logger.js';
 
 // Import routes and middleware
 import authRoutes from './routes/auth.js';
@@ -30,237 +33,284 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Load environment variables
-dotenv.config();
+dotenv.config({ path: join(__dirname, '..', '.env') });
 
-// Configure Winston logger
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.errors({ stack: true }),
-    winston.format.colorize(),
-    winston.format.printf(({ timestamp, level, message, stack }) => {
-      return `${timestamp} [${level}]: ${stack || message}`;
-    })
-  ),
-  transports: [
-    new winston.transports.Console(),
-    new winston.transports.File({ 
-      filename: join(__dirname, 'logs', 'error.log'), 
-      level: 'error',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5
-    }),
-    new winston.transports.File({ 
-      filename: join(__dirname, 'logs', 'combined.log',),
-      maxsize: 5242880, // 5MB
-      maxFiles: 5
-    })
-  ]
-});
-
-// Validate required environment variables
-const requiredEnvVars = ['JWT_SECRET', 'MONGO_URI'];
-const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
-
-if (missingEnvVars.length > 0) {
-  logger.error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
-  logger.error('Please check your .env file and ensure all required variables are set.');
-  process.exit(1);
-}
-
-// Validate JWT_SECRET strength
-if (process.env.JWT_SECRET.length < 32) {
-  logger.error('JWT_SECRET must be at least 32 characters long for security.');
-  process.exit(1);
-}
-
-// Initialize Express app
-const app = express();
-const server = createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
-    credentials: true,
-    methods: ["GET", "POST"]
-  },
-  transports: ['websocket', 'polling']
-});
-
-// Global middleware stack (2025 best practices)
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https:"],
-      scriptSrc: ["'self'"],
-      connectSrc: ["'self'", "ws:", "wss:"],
-      mediaSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      frameSrc: ["'none'"]
+/**
+ * Validate environment configuration
+ */
+const validateEnvironment = () => {
+  logger.info('🔍 Validating environment configuration...');
+  
+  const requiredEnvVars = {
+    'JWT_SECRET': {
+      required: true,
+      minLength: 32,
+      description: 'JWT secret key for token signing'
+    },
+    'MONGO_URI': {
+      required: true,
+      pattern: /^mongodb/,
+      description: 'MongoDB connection string'
+    },
+    'NODE_ENV': {
+      required: false,
+      default: 'development',
+      description: 'Application environment'
+    },
+    'PORT': {
+      required: false,
+      default: '3000',
+      description: 'Server port number'
+    },
+    'FRONTEND_URL': {
+      required: false,
+      default: 'http://localhost:5173',
+      description: 'Frontend application URL'
     }
-  },
-  crossOriginEmbedderPolicy: false
-}));
+  };
 
-// CORS configuration
-app.use(cors({
-  origin: function (origin, callback) {
-    const allowedOrigins = [
-      process.env.FRONTEND_URL || 'http://localhost:5173',
-      'http://localhost:3000',
-      'http://127.0.0.1:5173'
-    ];
+  const missingVars = [];
+  const warnings = [];
+
+  Object.entries(requiredEnvVars).forEach(([varName, config]) => {
+    const value = process.env[varName];
     
-    // Allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
-      callback(null, true);
-    } else {
-      logger.warn(`CORS blocked request from origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
+    if (config.required && !value) {
+      missingVars.push(`${varName}: ${config.description}`);
+    } else if (!value && config.default) {
+      process.env[varName] = config.default;
+      warnings.push(`${varName} not set, using default: ${config.default}`);
     }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
+    
+    if (value && config.minLength && value.length < config.minLength) {
+      missingVars.push(`${varName}: Must be at least ${config.minLength} characters long`);
+    }
+    
+    if (value && config.pattern && !config.pattern.test(value)) {
+      missingVars.push(`${varName}: Invalid format`);
+    }
+  });
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: (parseInt(process.env.RATE_LIMIT_WINDOW) || 15) * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX) || 100, // limit each IP to 100 requests per windowMs
-  message: {
-    success: false,
-    message: 'Too many requests from this IP, please try again later.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => {
-    // Skip rate limiting for health checks
-    return req.path === '/health' || req.path === '/api/health';
+  if (warnings.length > 0) {
+    warnings.forEach(warning => logger.warn(`⚠️  ${warning}`));
   }
-});
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX) || 5, // limit each IP to 5 auth requests per windowMs
-  message: {
-    success: false,
-    message: 'Too many authentication attempts, please try again later.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
+  if (missingVars.length > 0) {
+    logger.error('❌ Missing or invalid environment variables:');
+    missingVars.forEach(error => logger.error(`   • ${error}`));
+    logger.error('\n📄 Please check your .env file. Copy from .env.example if needed:');
+    logger.error('   cp .env.example .env');
+    logger.error('   nano .env  # Edit the configuration');
+    process.exit(1);
+  }
 
-// Apply rate limiting
-app.use('/api/', limiter);
-app.use('/api/auth/', authLimiter);
+  logger.info('✅ Environment validation passed');
+};
 
-// Security middleware
-app.use(compression());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(mongoSanitize()); // Prevent NoSQL injection attacks
-app.use(hpp()); // Prevent HTTP Parameter Pollution attacks
-
-// Request logging middleware
-app.use((req, res, next) => {
-  const start = Date.now();
-  const { method, url, ip } = req;
+/**
+ * Initialize Express app with middleware
+ */
+const initializeApp = () => {
+  const app = express();
+  const server = createServer(app);
   
-  res.on('finish', () => {
-    const duration = Date.now() - start;
-    const { statusCode } = res;
+  // Initialize Socket.IO
+  const io = new Server(server, {
+    cors: {
+      origin: process.env.FRONTEND_URL || "http://localhost:5173",
+      credentials: true,
+      methods: ["GET", "POST"]
+    },
+    transports: ['websocket', 'polling'],
+    allowEIO3: true // Backward compatibility
+  });
+
+  // Security middleware (2025 best practices)
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        imgSrc: ["'self'", "data:", "https:"],
+        scriptSrc: ["'self'"],
+        connectSrc: ["'self'", "ws:", "wss:"],
+        mediaSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameSrc: ["'none'"]
+      }
+    },
+    crossOriginEmbedderPolicy: false
+  }));
+
+  // CORS configuration
+  app.use(cors({
+    origin: function (origin, callback) {
+      const allowedOrigins = [
+        process.env.FRONTEND_URL || 'http://localhost:5173',
+        'http://localhost:3000',
+        'http://127.0.0.1:5173',
+        'http://localhost:5174' // Backup port
+      ];
+      
+      // Allow requests with no origin (mobile apps, etc.)
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+        callback(null, true);
+      } else {
+        logger.warn(`CORS blocked request from: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  }));
+
+  // Rate limiting
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    message: {
+      success: false,
+      message: 'Too many requests from this IP, please try again later.'
+    },
+    standardHeaders: true,
+    legacyHeaders: false
+  });
+
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // limit each IP to 5 auth requests per windowMs
+    message: {
+      success: false,
+      message: 'Too many authentication attempts, please try again later.'
+    }
+  });
+
+  // Apply middleware
+  app.use('/api/', limiter);
+  app.use('/api/auth/', authLimiter);
+  app.use(compression());
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use(mongoSanitize());
+  app.use(hpp());
+
+  // Request logging
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      if (process.env.ENABLE_LOGGING === 'true') {
+        logger.http(`${req.method} ${req.url} - ${res.statusCode} - ${duration}ms - ${req.ip}`);
+      }
+    });
+    next();
+  });
+
+  // Health check endpoint
+  app.get('/health', (req, res) => {
+    const dbStatus = getDatabaseStatus();
     
-    if (process.env.ENABLE_LOGGING === 'true') {
-      logger.info(`${method} ${url} - ${statusCode} - ${duration}ms - ${ip}`);
-    }
+    res.json({
+      success: true,
+      message: 'P2P Secure Chat Server is running',
+      version: '1.1.0',
+      timestamp: new Date().toISOString(),
+      uptime: Math.floor(process.uptime()),
+      environment: process.env.NODE_ENV || 'development',
+      database: dbStatus,
+      features: {
+        authentication: true,
+        twoFactorAuth: true,
+        endToEndEncryption: true,
+        realTimeMessaging: true,
+        fileSharing: true,
+        speechToText: true,
+        richMedia: true
+      }
+    });
   });
-  
-  next();
-});
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    success: true,
-    message: 'P2P Secure Chat Server is running',
-    version: '1.1.0',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development',
-    features: {
-      authentication: true,
-      twoFactorAuth: true,
-      endToEndEncryption: true,
-      realTimeMessaging: true,
-      fileSharing: true
-    }
+  // API routes
+  app.use('/api/auth', authRoutes);
+  app.use('/api/messages', authenticateToken, messageRoutes);
+  app.use('/api/users', authenticateToken, userRoutes);
+
+  // Socket.IO connection handling
+  handleSocketConnection(io);
+
+  // Global error handling
+  app.use((err, req, res, next) => {
+    logger.error('Unhandled error:', err);
+    
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    
+    res.status(err.status || 500).json({
+      success: false,
+      message: err.message || 'Internal server error',
+      ...(isDevelopment && {
+        error: err.message,
+        stack: err.stack
+      })
+    });
   });
-});
 
-// API routes
-app.use('/api/auth', authRoutes);
-app.use('/api/messages', authenticateToken, messageRoutes);
-app.use('/api/users', authenticateToken, userRoutes);
-
-// Socket.IO connection handling
-handleSocketConnection(io);
-
-// Global error handling middleware
-app.use((err, req, res, next) => {
-  logger.error('Unhandled error:', err);
-  
-  // Don't leak error details in production
-  const isDevelopment = process.env.NODE_ENV === 'development';
-  
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal server error',
-    ...(isDevelopment && {
-      error: err.message,
-      stack: err.stack
-    })
+  // 404 handler
+  app.use('*', (req, res) => {
+    res.status(404).json({
+      success: false,
+      message: `Route ${req.originalUrl} not found`
+    });
   });
-});
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: `Route ${req.originalUrl} not found`
-  });
-});
+  return { app, server, io };
+};
 
-// Database connection with retry logic
-const connectDB = async (retries = 5) => {
+/**
+ * Start the server
+ */
+const startServer = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
+    logger.info('🚀 Starting P2P Secure Chat Server...');
+    
+    // 1. Validate environment
+    validateEnvironment();
+    
+    // 2. Initialize database
+    await initializeDatabase();
+    
+    // 3. Initialize Express app
+    const { app, server, io } = initializeApp();
+    
+    // 4. Start HTTP server
+    const PORT = process.env.PORT || 3000;
+    server.listen(PORT, () => {
+      logger.info(`✅ Server running on port ${PORT}`);
+      logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+      logger.info(`🔗 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
+      logger.info(`📊 Health Check: http://localhost:${PORT}/health`);
+      logger.info(`👥 Server ready for connections!`);
+      
+      // Log startup summary
+      logger.info('\n🎉 P2P Secure Chat Server Started Successfully!');
+      logger.info('Features enabled:');
+      logger.info('  ✅ End-to-End Encryption');
+      logger.info('  ✅ Two-Factor Authentication');
+      logger.info('  ✅ Real-time Messaging');
+      logger.info('  ✅ Rich Media Support');
+      logger.info('  ✅ Speech-to-Text');
+      logger.info('  ✅ Mobile Responsive');
     });
     
-    logger.info(`🌿 MongoDB Connected: ${conn.connection.host}`);
-    logger.info(`💾 Database: ${conn.connection.name}`);
+    return { app, server, io };
     
-    return conn;
   } catch (error) {
-    logger.error(`MongoDB connection error: ${error.message}`);
-    
-    if (retries > 0) {
-      logger.info(`Retrying database connection... (${retries} attempts remaining)`);
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      return connectDB(retries - 1);
-    } else {
-      logger.error('Failed to connect to database after multiple attempts');
-      process.exit(1);
-    }
+    logger.error(`❌ Failed to start server: ${error.message}`);
+    logger.error('Stack trace:', error.stack);
+    process.exit(1);
   }
 };
 
@@ -268,16 +318,17 @@ const connectDB = async (retries = 5) => {
 const gracefulShutdown = (signal) => {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
   
-  server.close(() => {
-    logger.info('HTTP server closed');
-    
-    mongoose.connection.close(false, () => {
-      logger.info('MongoDB connection closed');
+  // Close server
+  if (global.httpServer) {
+    global.httpServer.close(() => {
+      logger.info('HTTP server closed');
       process.exit(0);
     });
-  });
+  } else {
+    process.exit(0);
+  }
   
-  // Force close after 30 seconds
+  // Force exit after 30 seconds
   setTimeout(() => {
     logger.error('Forced shutdown after 30 seconds');
     process.exit(1);
@@ -299,29 +350,16 @@ process.on('unhandledRejection', (reason, promise) => {
   gracefulShutdown('UNHANDLED_REJECTION');
 });
 
-// Start server
-const PORT = process.env.PORT || 3000;
-
-const startServer = async () => {
-  try {
-    // Connect to database first
-    await connectDB();
-    
-    // Start HTTP server
-    server.listen(PORT, () => {
-      logger.info(`🚀 P2P Secure Chat Server running on port ${PORT}`);
-      logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-      logger.info(`🔗 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
-      logger.info(`👥 Server ready for connections!`);
+// Start server if this file is executed directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  startServer()
+    .then(({ server }) => {
+      global.httpServer = server;
+    })
+    .catch((error) => {
+      logger.error('Startup failed:', error);
+      process.exit(1);
     });
-    
-  } catch (error) {
-    logger.error('Failed to start server:', error);
-    process.exit(1);
-  }
-};
+}
 
-// Initialize server
-startServer();
-
-export { app, server, io };
+export default startServer;
