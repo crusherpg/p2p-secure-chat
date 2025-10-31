@@ -1,0 +1,20 @@
+{
+  "name": "p2p-secure-chat",
+  "version": "1.0.0",
+  "description": "Self-hosted, end-to-end encrypted MERN stack chat application with Signal-grade security",
+  "scripts": {
+    "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "server:dev": "cd server && npm run dev",
+    "client:dev": "cd client && npm run dev",
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install",
+    "build": "cd client && npm run build",
+    "start": "cd server && npm start",
+    "test": "cd server && npm test"
+  },
+  "keywords": ["chat", "encryption", "p2p", "secure", "mern", "self-hosted"],
+  "author": "Pritesh",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}
