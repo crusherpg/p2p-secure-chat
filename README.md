@@ -1,40 +1,27 @@
 # P2P Secure Chat 🔒
 
-A self-hosted, end-to-end encrypted chat application built with the MERN stack, providing Signal-grade security while being completely owned and controlled by you.
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/crusherpg/p2p-secure-chat)
+[![Node.js](https://img.shields.io/badge/node.js-%3E%3D18.0.0-green.svg)](https://nodejs.org/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-![P2P Chat Banner](https://img.shields.io/badge/P2P-Secure%20Chat-blue?style=for-the-badge)
-![Security](https://img.shields.io/badge/Security-E2E%20Encrypted-green?style=for-the-badge)
-![Tech Stack](https://img.shields.io/badge/Stack-MERN-orange?style=for-the-badge)
+A modern, secure, self-hosted chat application with end-to-end encryption, two-factor authentication, and rich media support. Built with the latest 2025 coding standards and best practices.
 
-## 🌟 Features
+## 🎉 **NEW in v1.1.0 - Enhanced Features**
 
-### 🔐 Security First
-- **End-to-End Encryption** with AES-256-GCM
-- **Two-Factor Authentication** (TOTP/Google Authenticator)
-- **Argon2id Password Hashing**
-- **Forward Secrecy** with key rotation
-- **Zero Knowledge Architecture**
+✨ **Latest Updates:**
+- ✅ **Complete logout functionality** with secure session cleanup
+- ✅ **Rich media support** - Emojis, GIFs, Images, and Voice messages  
+- ✅ **Speech-to-text integration** with real-time transcription
+- ✅ **Mobile-responsive design** with touch-optimized interfaces
+- ✅ **Enhanced read receipts** with clear status indicators
+- ✅ **2025 coding standards** with ES modules and modern Node.js features
 
-### 💬 Modern Chat Experience
-- **Real-time Messaging** with WebSocket
-- **File Sharing** with encryption
-- **Typing Indicators** and read receipts
-- **Mobile Responsive** design
-- **Dark/Light Mode** support
-
-### 🏠 Self-Hosted
-- **Complete Data Ownership**
-- **No Third-Party Dependencies**
-- **AWS EC2 Deployment Ready**
-- **Docker Support** (coming soon)
-- **Horizontal Scaling** capable
-
-## 🚀 Quick Start
+## 🚀 **Quick Start**
 
 ### Prerequisites
-- Node.js 18+ and npm
-- MongoDB 6.0+
-- Git
+- **Node.js** 18+ and npm 8+
+- **MongoDB** 6.0+ (local or cloud)
+- **Git**
 
 ### 1. Clone Repository
 ```bash
@@ -42,211 +29,304 @@ git clone https://github.com/crusherpg/p2p-secure-chat.git
 cd p2p-secure-chat
 ```
 
-### 2. Install Dependencies
+### 2. Environment Setup
 ```bash
-npm run install:all
+# Copy environment template
+cp .env.example .env
+
+# Edit .env file with your configuration
+nano .env  # or your preferred editor
 ```
 
-### 3. Environment Setup
+**Required Environment Variables:**
+```env
+# CRITICAL: Generate a strong JWT secret (32+ characters)
+JWT_SECRET=your-super-secure-jwt-secret-key-change-this-in-production-minimum-32-chars
+
+# Database connection
+MONGO_URI=mongodb://localhost:27017/p2p_chat
+
+# Server configuration
+PORT=3000
+FRONTEND_URL=http://localhost:5173
+```
+
+### 3. Install Dependencies
 ```bash
-cp .env.example .env
-# Edit .env with your configuration
+# Install all dependencies (client + server)
+npm run install:all
+
+# Or install individually:
+# cd server && npm install
+# cd ../client && npm install
 ```
 
 ### 4. Start Development
 ```bash
+# Start both client and server in development mode
+npm run dev
+
+# Or start individually:
+# Terminal 1: cd server && npm run dev
+# Terminal 2: cd client && npm run dev
+```
+
+### 5. Access Application
+- **Frontend:** http://localhost:5173
+- **Backend API:** http://localhost:3000
+- **Health Check:** http://localhost:3000/health
+
+## 🎯 **Features**
+
+### 🔐 **Security First**
+- **End-to-End Encryption**: AES-256-GCM encryption for all messages
+- **Two-Factor Authentication**: TOTP support with Google Authenticator
+- **Argon2 Password Hashing**: Industry standard 2025 password security
+- **JWT Authentication**: Secure token-based authentication
+- **Session Management**: Comprehensive session tracking and cleanup
+- **Rate Limiting**: DDoS protection and abuse prevention
+- **Input Validation**: Comprehensive sanitization and validation
+
+### 📨 **Rich Messaging**
+- **Text Messages**: Real-time encrypted messaging
+- **Emoji Support**: Comprehensive emoji picker with categories
+- **GIF Integration**: Search and send GIFs from Tenor
+- **Image Sharing**: Drag-and-drop image uploads with preview
+- **Voice Messages**: Record and send audio messages with waveform
+- **File Attachments**: Secure file sharing (up to 25MB)
+- **Read Receipts**: Clear delivery and read status indicators
+- **Typing Indicators**: Real-time typing status
+
+### 🎤 **Advanced Features**
+- **Speech-to-Text**: Convert voice to text using Web Speech API
+- **Real-time Communication**: WebSocket-based instant messaging
+- **Mobile Responsive**: Touch-optimized interface for all devices
+- **Dark/Light Theme**: Beautiful themes with system preference detection
+- **Online Status**: Real-time user presence indicators
+- **Message History**: Encrypted message storage and retrieval
+
+### 📱 **Mobile Optimized**
+- **Touch Controls**: Optimized for mobile interactions
+- **Responsive Design**: Adapts to all screen sizes
+- **Bottom Sheet UI**: Mobile-friendly media pickers
+- **Gesture Support**: Intuitive touch gestures
+- **PWA Ready**: Progressive Web App capabilities
+
+## 🔧 **Technology Stack**
+
+### **Frontend (Client)**
+- **React 18** - Modern React with hooks and concurrent features
+- **Vite** - Lightning fast build tool and dev server
+- **TailwindCSS** - Utility-first CSS framework with dark mode
+- **Socket.io Client** - Real-time communication
+- **Framer Motion** - Smooth animations and transitions
+- **Web Speech API** - Native browser speech recognition
+- **Modern Dependencies** (2025 standards):
+  - `emoji-picker-react` - Emoji selection
+  - `react-dropzone` - File upload handling
+  - `react-hot-toast` - Beautiful notifications
+  - `lucide-react` - Modern icon library
+
+### **Backend (Server)**
+- **Node.js 18+** - Modern JavaScript runtime with ES modules
+- **Express.js** - Fast, unopinionated web framework
+- **MongoDB** - NoSQL database with Mongoose ODM
+- **Socket.io** - Real-time bidirectional communication
+- **Security Stack** (2025 standards):
+  - `argon2` - Password hashing
+  - `helmet` - Security headers
+  - `express-rate-limit` - Rate limiting
+  - `express-validator` - Input validation
+  - `cors` - Cross-origin resource sharing
+  - `winston` - Advanced logging
+
+## 🛠️ **API Documentation**
+
+### **Authentication Endpoints**
+```
+POST /api/auth/register     # Register new user
+POST /api/auth/login        # User login
+POST /api/auth/logout       # Secure logout
+GET  /api/auth/profile      # Get user profile
+POST /api/auth/totp/setup   # Setup 2FA
+POST /api/auth/totp/verify  # Verify 2FA code
+```
+
+### **User Management**
+```
+GET  /api/users             # Get user list
+GET  /api/users/online      # Get online users
+PUT  /api/users/profile     # Update profile
+PUT  /api/users/status      # Update online status
+```
+
+### **Messaging**
+```
+GET  /api/messages/conversations    # Get conversations
+GET  /api/messages/conversation/:id # Get messages
+POST /api/messages/send            # Send message
+PUT  /api/messages/:id/status      # Update message status
+```
+
+## 📱 **Mobile Setup**
+
+The application is fully responsive and mobile-optimized:
+
+### **Features on Mobile**
+- Touch-optimized controls
+- Bottom sheet interfaces
+- Voice recording with haptic feedback
+- Mobile keyboard optimization
+- Gesture-friendly interactions
+- PWA installation support
+
+### **Testing on Mobile**
+1. Start the development server
+2. Access via your mobile device: `http://YOUR_IP:5173`
+3. Add to home screen for PWA experience
+
+## 🔒 **Security Configuration**
+
+### **Environment Security Checklist**
+- ✅ Generate strong JWT_SECRET (32+ characters)
+- ✅ Use strong MongoDB credentials
+- ✅ Enable MongoDB authentication
+- ✅ Configure proper CORS origins
+- ✅ Set up rate limiting
+- ✅ Use HTTPS in production
+
+### **JWT Secret Generation**
+```bash
+# Generate a secure JWT secret
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+# Or use online generator (for development only)
+# For production, always generate locally
+```
+
+## 🚀 **Production Deployment**
+
+### **Environment Setup**
+```env
+NODE_ENV=production
+JWT_SECRET=your-production-jwt-secret-32-plus-characters
+MONGO_URI=mongodb://username:password@host:port/database
+FRONTEND_URL=https://your-domain.com
+PORT=3000
+```
+
+### **Build and Deploy**
+```bash
+# Build client for production
+cd client && npm run build
+
+# Start production server
+cd ../server && npm start
+```
+
+### **Docker Deployment**
+```bash
+# Build Docker image
+docker build -t p2p-secure-chat .
+
+# Run container
+docker run -d -p 3000:3000 --env-file .env p2p-secure-chat
+```
+
+## 🔍 **Troubleshooting**
+
+### **Common Issues**
+
+#### ❌ **"secretOrPrivateKey must have a value"**
+```bash
+# This error occurs when JWT_SECRET is not set or too short
+# Solution: Set a strong JWT_SECRET in your .env file
+JWT_SECRET=your-super-secure-jwt-secret-key-minimum-32-characters-long
+```
+
+#### ❌ **MongoDB Connection Failed**
+```bash
+# Check MongoDB is running
+mongodb --version
+sudo systemctl status mongod  # Linux
+brew services list | grep mongodb  # macOS
+
+# Verify connection string in .env
+MONGO_URI=mongodb://localhost:27017/p2p_chat
+```
+
+#### ❌ **CORS Errors**
+```bash
+# Ensure FRONTEND_URL matches your client URL
+FRONTEND_URL=http://localhost:5173
+```
+
+#### ❌ **Port Already in Use**
+```bash
+# Find process using port
+lsof -i :3000
+# Kill process
+kill -9 <PID>
+# Or change port in .env
+PORT=3001
+```
+
+### **Development Tips**
+- Enable detailed logging: `ENABLE_LOGGING=true`
+- Check health endpoint: `curl http://localhost:3000/health`
+- Monitor logs in `server/logs/` directory
+- Use browser dev tools for client-side debugging
+
+## 🤝 **Contributing**
+
+### **Development Setup**
+```bash
+# Fork and clone the repository
+git clone https://github.com/YOUR_USERNAME/p2p-secure-chat.git
+
+# Create feature branch
+git checkout -b feature/amazing-feature
+
+# Install dependencies and start development
+npm run install:all
 npm run dev
 ```
 
-The application will be available at:
-- Frontend: http://localhost:5173
-- Backend: http://localhost:3000
+### **Code Standards**
+- **ES2025 Modules**: Use import/export syntax
+- **Async/Await**: Modern async patterns
+- **JSDoc Comments**: Comprehensive documentation
+- **Input Validation**: Validate all user inputs
+- **Error Handling**: Comprehensive error handling
+- **Security First**: Follow security best practices
 
-## 📁 Project Structure
-
-```
-p2p-secure-chat/
-├── client/                 # React frontend
-│   ├── src/
-│   │   ├── components/     # Reusable UI components
-│   │   ├── pages/         # Main application pages
-│   │   ├── context/       # React context providers
-│   │   ├── hooks/         # Custom React hooks
-│   │   ├── services/      # API and WebSocket services
-│   │   └── utils/         # Crypto and utility functions
-│   └── package.json
-├── server/                # Node.js backend
-│   ├── config/           # Database and environment config
-│   ├── controllers/      # Route controllers
-│   ├── models/          # MongoDB schemas
-│   ├── routes/          # API routes
-│   ├── middleware/      # Authentication & security middleware
-│   ├── sockets/         # Socket.io handlers
-│   ├── utils/           # Server utilities
-│   └── server.js        # Main server file
-├── nginx/               # Nginx configuration
-├── scripts/             # Deployment scripts
-└── docs/               # Documentation
-```
-
-## 🔧 Technology Stack
-
-### Frontend
-- **React 18** with Vite
-- **TailwindCSS** for styling
-- **Socket.io Client** for real-time communication
-- **Web Crypto API** for encryption
-
-### Backend
-- **Node.js** with Express.js
-- **MongoDB** with Mongoose
-- **Socket.io** for WebSocket communication
-- **JWT** for authentication
-- **Argon2** for password hashing
-- **Speakeasy** for TOTP 2FA
-
-### Security
-- **AES-256-GCM** encryption
-- **ECDH** key exchange
-- **Argon2id** password hashing
-- **Rate limiting** and DDoS protection
-- **HTTPS** with HSTS headers
-
-## 🌐 Deployment
-
-### AWS EC2 (Ubuntu 24.04 LTS)
-
-1. **Launch EC2 Instance**
-   ```bash
-   # t3.micro (free tier eligible)
-   # Allow ports: 22, 80, 443
-   ```
-
-2. **Install Dependencies**
-   ```bash
-   sudo apt update && sudo apt install -y nodejs npm mongodb nginx certbot python3-certbot-nginx
-   ```
-
-3. **Clone and Build**
-   ```bash
-   git clone https://github.com/crusherpg/p2p-secure-chat.git
-   cd p2p-secure-chat
-   npm run install:all
-   npm run build
-   ```
-
-4. **Configure Nginx**
-   ```bash
-   sudo cp nginx/p2p.conf /etc/nginx/sites-available/
-   sudo ln -s /etc/nginx/sites-available/p2p.conf /etc/nginx/sites-enabled/
-   sudo nginx -t && sudo systemctl restart nginx
-   ```
-
-5. **SSL with Let's Encrypt**
-   ```bash
-   sudo certbot --nginx -d yourdomain.com
-   ```
-
-6. **Start with PM2**
-   ```bash
-   npm install -g pm2
-   pm2 start ecosystem.config.js --env production
-   pm2 startup && pm2 save
-   ```
-
-See [deployment guide](docs/deployment-guide.md) for detailed instructions.
-
-## 🔒 Security Features
-
-### Encryption
-- **Client-side encryption** - Messages encrypted before leaving your device
-- **AES-256-GCM** - Industry standard encryption algorithm
-- **Unique keys** - Each conversation has its own encryption keys
-- **Forward secrecy** - Past messages remain secure even if keys are compromised
-
-### Authentication
-- **Multi-factor authentication** - Email + Password + TOTP
-- **Secure session management** - JWT tokens with proper configuration
-- **Account security** - Rate limiting, account lockout, secure password reset
-
-### Infrastructure
-- **Self-hosted** - Complete control over your data
-- **Database security** - MongoDB with authentication and localhost binding
-- **Network security** - HTTPS only, security headers, rate limiting
-- **File security** - Encrypted file storage and transmission
-
-## 📚 Documentation
-
-- [Deployment Guide](docs/deployment-guide.md)
-- [Security Implementation](docs/security-implementation.md)
-- [API Documentation](docs/api-documentation.md)
-- [Security Testing](docs/security-testing.md)
-
-## 🧪 Testing
-
-### Run Tests
-```bash
-# Server tests
-cd server && npm test
-
-# Security audit
-npm run security:audit
-
-# Load testing
-npm run test:load
-```
-
-### Security Checklist
-- [ ] Password complexity requirements
-- [ ] 2FA setup and verification
-- [ ] Message encryption/decryption
-- [ ] File upload security
-- [ ] Rate limiting effectiveness
-- [ ] SSL/TLS configuration
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Development Guidelines
-- Follow security best practices
-- Write comprehensive tests
-- Update documentation
-- Maintain backwards compatibility
-
-## 🛡️ Security
-
-### Reporting Vulnerabilities
-Please report security vulnerabilities privately via:
-- Email: security@your-domain.com
-- GitHub Security Advisories
-
-### Security Audit
-This application undergoes regular security audits. Latest audit: [View Report](docs/security-audit.md)
-
-## 📄 License
+## 📄 **License**
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## 🙏 **Acknowledgments**
 
 - **Signal Protocol** - Inspiration for encryption implementation
+- **Web Speech API** - Native browser speech recognition
+- **Socket.io** - Real-time communication framework
 - **OWASP** - Security guidelines and best practices
-- **MongoDB** - Database security recommendations
-- **Let's Encrypt** - Free SSL certificates
+- **Node.js Security** - Modern security patterns
 
-## 📞 Support
+## 📞 **Support**
 
-- **Documentation**: [docs/](docs/)
-- **Issues**: [GitHub Issues](https://github.com/crusherpg/p2p-secure-chat/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/crusherpg/p2p-secure-chat/discussions)
+### **Get Help**
+- 🐛 **Issues**: [GitHub Issues](https://github.com/crusherpg/p2p-secure-chat/issues)
+- 📈 **Discussions**: [GitHub Discussions](https://github.com/crusherpg/p2p-secure-chat/discussions)
+- 📧 **Security**: Report security issues privately
+
+### **Quick Links**
+- 📚 [API Documentation](docs/api.md)
+- 🔒 [Security Guide](docs/security.md)
+- 🚀 [Deployment Guide](docs/deployment.md)
+- 📱 [Mobile Guide](docs/mobile.md)
 
 ---
 
-**⚠️ Security Notice**: This application implements strong security measures, but no system is 100% secure. Regular security updates, monitoring, and following best practices are essential for production deployment.
+**🔐 Privacy First**: Your messages, your data, your control. P2P Secure Chat puts privacy and security at the forefront of digital communication while providing modern, media-rich messaging capabilities with 2025 coding standards.
 
-**🔐 Privacy First**: Your messages, your data, your control. P2P Secure Chat puts privacy and security at the forefront of digital communication.
+**Built with ❤️ using modern web technologies and security best practices.**

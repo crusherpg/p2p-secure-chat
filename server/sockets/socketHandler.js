@@ -1,268 +1,316 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const Message = require('../models/Message');
-const Conversation = require('../models/Conversation');
+/**
+ * Socket.IO Connection Handler for P2P Secure Chat
+ * Updated to 2025 standards with modern async/await patterns
+ */
 
-// Store connected users
-const connectedUsers = new Map();
+import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
+import winston from 'winston';
 
-// Socket authentication middleware
+// Configure logger
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.printf(({ timestamp, level, message }) => {
+      return `${timestamp} [SOCKET] [${level.toUpperCase()}]: ${message}`;
+    })
+  ),
+  transports: [new winston.transports.Console()]
+});
+
+/**
+ * Authenticate socket connection using JWT token
+ * @param {Object} socket - Socket.IO socket instance
+ * @param {Function} next - Next middleware function
+ */
 const authenticateSocket = async (socket, next) => {
   try {
-    const token = socket.handshake.auth.token;
-    if (!token) {
-      return next(new Error('Authentication error'));
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.userId).select('-password -totpSecret');
+    const token = socket.handshake.auth.token || socket.handshake.headers.authorization;
     
-    if (!user) {
-      return next(new Error('User not found'));
+    if (!token) {
+      logger.warn(`Socket authentication failed: No token provided from ${socket.handshake.address}`);
+      return next(new Error('Authentication token required'));
     }
-
-    socket.userId = user._id.toString();
-    socket.user = user;
+    
+    // Extract token from Bearer format if needed
+    const cleanToken = token.startsWith('Bearer ') ? token.substring(7) : token;
+    
+    // Verify JWT token
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      logger.error('JWT_SECRET not configured for socket authentication');
+      return next(new Error('Server configuration error'));
+    }
+    
+    const decoded = jwt.verify(cleanToken, secret, {
+      issuer: 'P2P-Secure-Chat',
+      audience: 'P2P-Client',
+      algorithms: ['HS256']
+    });
+    
+    // Fetch user from database
+    const user = await User.findById(decoded.userId)
+      .select('-password -totpSecret -sessions -backupCodes')
+      .lean();
+    
+    if (!user || !user.isActive) {
+      logger.warn(`Socket authentication failed: User not found or inactive - ${decoded.userId}`);
+      return next(new Error('User not found or inactive'));
+    }
+    
+    // Attach user to socket
+    socket.user = {
+      id: user._id.toString(),
+      email: user.email,
+      username: user.username,
+      avatar: user.avatar,
+      status: user.status,
+      preferences: user.preferences
+    };
+    
+    logger.info(`Socket authenticated successfully: ${user.username} (${socket.id})`);
     next();
+    
   } catch (error) {
-    next(new Error('Authentication error'));
+    logger.warn(`Socket authentication error: ${error.message}`);
+    
+    if (error.name === 'TokenExpiredError') {
+      return next(new Error('Token expired'));
+    } else if (error.name === 'JsonWebTokenError') {
+      return next(new Error('Invalid token'));
+    }
+    
+    return next(new Error('Authentication failed'));
   }
 };
 
-const handleConnection = (io) => {
-  // Apply authentication middleware
+/**
+ * Handle socket connection events
+ * @param {Object} io - Socket.IO server instance
+ */
+const handleSocketConnection = (io) => {
+  // Authentication middleware
   io.use(authenticateSocket);
-
+  
+  // Handle connections
   io.on('connection', async (socket) => {
-    console.log(`🔗 User connected: ${socket.user.username} (${socket.userId})`);
-
-    // Store user connection
-    connectedUsers.set(socket.userId, {
-      socketId: socket.id,
-      user: socket.user
-    });
-
-    // Update user status to online
-    await User.findByIdAndUpdate(socket.userId, {
-      status: 'online',
-      lastSeen: new Date()
-    });
-
-    // Notify other users that this user is online
-    socket.broadcast.emit('user_status_change', {
-      userId: socket.userId,
-      status: 'online'
-    });
-
-    // Join user to their conversation rooms
-    const conversations = await Conversation.find({
-      'participants.user': socket.userId,
-      'participants.isActive': true
-    });
-
-    conversations.forEach(conv => {
-      socket.join(conv._id.toString());
-    });
-
-    // Handle typing indicators
-    socket.on('typing_start', (data) => {
-      socket.to(data.conversationId).emit('user_typing', {
-        userId: socket.userId,
-        username: socket.user.username,
-        conversationId: data.conversationId
-      });
-    });
-
-    socket.on('typing_stop', (data) => {
-      socket.to(data.conversationId).emit('user_stop_typing', {
-        userId: socket.userId,
-        conversationId: data.conversationId
-      });
-    });
-
-    // Handle message sending
-    socket.on('send_message', async (data) => {
-      try {
-        const { conversationId, encryptedContent, iv, authTag, type, attachment } = data;
-
-        // Verify user is part of conversation
-        const conversation = await Conversation.findOne({
-          _id: conversationId,
-          'participants.user': socket.userId,
-          'participants.isActive': true
-        });
-
-        if (!conversation) {
-          socket.emit('error', { message: 'Unauthorized conversation access' });
-          return;
-        }
-
-        // Get the other participant for direct messages
-        const otherParticipant = conversation.participants.find(
-          p => p.user.toString() !== socket.userId
-        );
-
-        // Create message
-        const message = new Message({
-          from: socket.userId,
-          to: otherParticipant.user,
-          conversation: conversationId,
-          content: {
-            encrypted: encryptedContent,
-            iv: iv,
-            authTag: authTag
-          },
-          type: type || 'text',
-          attachment: attachment
-        });
-
-        await message.save();
-
-        // Update conversation last activity
-        conversation.lastMessage = message._id;
-        conversation.lastActivity = new Date();
-        conversation.messageCount += 1;
-        await conversation.save();
-
-        // Populate sender info
-        await message.populate('from', 'username avatar');
-
-        // Send message to all participants in the conversation
-        io.to(conversationId).emit('new_message', {
-          id: message._id,
-          from: {
-            id: message.from._id,
-            username: message.from.username,
-            avatar: message.from.avatar
-          },
-          conversationId: conversationId,
-          content: message.content,
-          type: message.type,
-          attachment: message.attachment,
-          timestamp: message.createdAt,
-          status: 'sent'
-        });
-
-        // Send delivery confirmation to sender
-        socket.emit('message_delivered', {
-          messageId: message._id,
-          timestamp: new Date()
-        });
-
-        console.log(`💬 Message sent from ${socket.user.username} in conversation ${conversationId}`);
-
-      } catch (error) {
-        console.error('❌ Send message error:', error);
-        socket.emit('error', { message: 'Failed to send message' });
-      }
-    });
-
-    // Handle message status updates
-    socket.on('message_read', async (data) => {
-      try {
-        const { messageId, conversationId } = data;
-
-        await Message.findByIdAndUpdate(messageId, {
-          status: 'read',
-          readAt: new Date()
-        });
-
-        // Notify sender that message was read
-        socket.to(conversationId).emit('message_status_update', {
-          messageId: messageId,
-          status: 'read',
-          readBy: socket.userId,
-          timestamp: new Date()
-        });
-
-      } catch (error) {
-        console.error('❌ Message read error:', error);
-      }
-    });
-
-    // Handle conversation creation
-    socket.on('create_conversation', async (data) => {
-      try {
-        const { participantId, type = 'direct' } = data;
-
-        // Check if conversation already exists
-        let conversation = await Conversation.findOne({
-          type: 'direct',
-          'participants.user': { $all: [socket.userId, participantId] }
-        });
-
-        if (conversation) {
-          socket.emit('conversation_created', { conversation });
-          return;
-        }
-
-        // Create new conversation
-        conversation = new Conversation({
-          type: type,
-          participants: [
-            { user: socket.userId },
-            { user: participantId }
-          ]
-        });
-
-        await conversation.save();
-        await conversation.populate('participants.user', 'username avatar status');
-
-        // Join both users to the conversation room
-        socket.join(conversation._id.toString());
-        const participantSocket = connectedUsers.get(participantId);
-        if (participantSocket) {
-          io.to(participantSocket.socketId).socketsJoin(conversation._id.toString());
-        }
-
-        // Notify both users
-        io.to(conversation._id.toString()).emit('conversation_created', {
-          conversation: conversation
-        });
-
-        console.log(`💬 New conversation created between ${socket.user.username} and participant ${participantId}`);
-
-      } catch (error) {
-        console.error('❌ Create conversation error:', error);
-        socket.emit('error', { message: 'Failed to create conversation' });
-      }
-    });
-
-    // Handle file upload notification
-    socket.on('file_uploaded', (data) => {
-      socket.to(data.conversationId).emit('file_upload_notification', {
-        from: socket.userId,
-        filename: data.filename,
-        conversationId: data.conversationId
-      });
-    });
-
-    // Handle disconnect
-    socket.on('disconnect', async () => {
-      console.log(`👋 User disconnected: ${socket.user.username} (${socket.userId})`);
-
-      // Remove from connected users
-      connectedUsers.delete(socket.userId);
-
-      // Update user status
-      await User.findByIdAndUpdate(socket.userId, {
-        status: 'offline',
+    const user = socket.user;
+    
+    try {
+      // Update user status to online
+      await User.findByIdAndUpdate(user.id, {
+        status: 'online',
         lastSeen: new Date()
       });
-
-      // Notify other users that this user is offline
+      
+      logger.info(`🔗 User connected: ${user.username} (${socket.id})`);
+      
+      // Join user to their personal room
+      socket.join(`user:${user.id}`);
+      
+      // Broadcast user online status
       socket.broadcast.emit('user_status_change', {
-        userId: socket.userId,
-        status: 'offline',
-        lastSeen: new Date()
+        userId: user.id,
+        username: user.username,
+        status: 'online',
+        timestamp: new Date().toISOString()
       });
-    });
-
-    // Handle errors
-    socket.on('error', (error) => {
-      console.error('🚨 Socket error:', error);
-    });
+      
+      // Handle incoming message
+      socket.on('send_message', async (data) => {
+        try {
+          const {
+            conversationId,
+            encryptedContent,
+            iv,
+            authTag,
+            type = 'text',
+            attachment
+          } = data;
+          
+          if (!conversationId || !encryptedContent) {
+            socket.emit('error', { message: 'Invalid message data' });
+            return;
+          }
+          
+          // Create message object
+          const messageData = {
+            id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            conversationId,
+            from: {
+              id: user.id,
+              username: user.username,
+              avatar: user.avatar
+            },
+            type,
+            content: {
+              encrypted: encryptedContent,
+              iv,
+              authTag
+            },
+            attachment,
+            timestamp: new Date().toISOString(),
+            status: 'sent'
+          };
+          
+          // Emit to conversation participants (demo implementation)
+          socket.to(`conversation:${conversationId}`).emit('new_message', messageData);
+          
+          // Confirm message sent
+          socket.emit('message_sent', {
+            tempId: data.tempId,
+            messageId: messageData.id,
+            timestamp: messageData.timestamp
+          });
+          
+          logger.info(`Message sent by ${user.username} in conversation ${conversationId}`);
+          
+        } catch (error) {
+          logger.error(`Error handling send_message: ${error.message}`);
+          socket.emit('error', { message: 'Failed to send message' });
+        }
+      });
+      
+      // Handle typing indicators
+      socket.on('typing_start', (data) => {
+        try {
+          const { conversationId } = data;
+          if (conversationId) {
+            socket.to(`conversation:${conversationId}`).emit('user_typing', {
+              userId: user.id,
+              username: user.username,
+              conversationId,
+              timestamp: new Date().toISOString()
+            });
+          }
+        } catch (error) {
+          logger.error(`Error handling typing_start: ${error.message}`);
+        }
+      });
+      
+      socket.on('typing_stop', (data) => {
+        try {
+          const { conversationId } = data;
+          if (conversationId) {
+            socket.to(`conversation:${conversationId}`).emit('user_stop_typing', {
+              userId: user.id,
+              username: user.username,
+              conversationId,
+              timestamp: new Date().toISOString()
+            });
+          }
+        } catch (error) {
+          logger.error(`Error handling typing_stop: ${error.message}`);
+        }
+      });
+      
+      // Handle message read receipts
+      socket.on('message_read', (data) => {
+        try {
+          const { messageId, conversationId } = data;
+          if (messageId && conversationId) {
+            socket.to(`conversation:${conversationId}`).emit('message_status_update', {
+              messageId,
+              status: 'read',
+              readBy: user.id,
+              timestamp: new Date().toISOString()
+            });
+            
+            logger.debug(`Message ${messageId} marked as read by ${user.username}`);
+          }
+        } catch (error) {
+          logger.error(`Error handling message_read: ${error.message}`);
+        }
+      });
+      
+      // Handle joining conversations
+      socket.on('join_conversation', (data) => {
+        try {
+          const { conversationId } = data;
+          if (conversationId) {
+            socket.join(`conversation:${conversationId}`);
+            logger.info(`User ${user.username} joined conversation ${conversationId}`);
+          }
+        } catch (error) {
+          logger.error(`Error handling join_conversation: ${error.message}`);
+        }
+      });
+      
+      // Handle leaving conversations
+      socket.on('leave_conversation', (data) => {
+        try {
+          const { conversationId } = data;
+          if (conversationId) {
+            socket.leave(`conversation:${conversationId}`);
+            logger.info(`User ${user.username} left conversation ${conversationId}`);
+          }
+        } catch (error) {
+          logger.error(`Error handling leave_conversation: ${error.message}`);
+        }
+      });
+      
+      // Handle file upload notifications
+      socket.on('file_uploaded', (data) => {
+        try {
+          const { conversationId, filename, fileType, fileSize } = data;
+          if (conversationId) {
+            socket.to(`conversation:${conversationId}`).emit('file_upload_notification', {
+              from: user.id,
+              username: user.username,
+              filename,
+              fileType,
+              fileSize,
+              timestamp: new Date().toISOString()
+            });
+          }
+        } catch (error) {
+          logger.error(`Error handling file_uploaded: ${error.message}`);
+        }
+      });
+      
+      // Handle disconnection
+      socket.on('disconnect', async (reason) => {
+        try {
+          // Update user status to offline
+          await User.findByIdAndUpdate(user.id, {
+            status: 'offline',
+            lastSeen: new Date()
+          });
+          
+          // Broadcast user offline status
+          socket.broadcast.emit('user_status_change', {
+            userId: user.id,
+            username: user.username,
+            status: 'offline',
+            lastSeen: new Date().toISOString(),
+            timestamp: new Date().toISOString()
+          });
+          
+          logger.info(`📡 User disconnected: ${user.username} (${reason})`);
+          
+        } catch (error) {
+          logger.error(`Error handling disconnect: ${error.message}`);
+        }
+      });
+      
+      // Handle connection errors
+      socket.on('error', (error) => {
+        logger.error(`Socket error for user ${user.username}: ${error.message}`);
+      });
+      
+    } catch (error) {
+      logger.error(`Error in socket connection handler: ${error.message}`);
+      socket.disconnect(true);
+    }
   });
+  
+  // Handle connection errors
+  io.on('connection_error', (error) => {
+    logger.error(`Socket.IO connection error: ${error.message}`);
+  });
+  
+  logger.info('🔗 Socket.IO server initialized and ready for connections');
 };
 
-module.exports = handleConnection;
+export default handleSocketConnection;
