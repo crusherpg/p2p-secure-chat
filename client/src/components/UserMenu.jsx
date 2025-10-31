@@ -4,53 +4,60 @@ import { useTheme } from '../context/ThemeContext';
 import { User, Settings, LogOut, Shield, Moon, Sun, ChevronDown, Bell, Lock } from 'lucide-react';
 import LoadingSpinner from './LoadingSpinner';
 import { ProfileSettingsModal, PrivacySecurityModal } from './SettingsModals';
+import { userService } from '../services/userService';
 
 const UserMenu = () => {
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [saving, setSaving] = useState(false);
   const menuRef = useRef(null);
   const buttonRef = useRef(null);
 
+  useEffect(() => { userService.setAuthToken(token); }, [token]);
+
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target) && buttonRef.current && !buttonRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
+      if (menuRef.current && !menuRef.current.contains(event.target) && buttonRef.current && !buttonRef.current.contains(event.target)) setIsOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleLogout = async () => {
-    console.log('[UserMenu] Logout clicked');
     setIsLoggingOut(true);
-    try { await logout(); } catch (error) { console.error('[UserMenu] Logout error:', error); } finally { setIsLoggingOut(false); setIsOpen(false); }
+    try { await logout(); } finally { setIsLoggingOut(false); setIsOpen(false); }
   };
 
-  const toggleMenu = () => { const next = !isOpen; console.log('[UserMenu] toggleMenu', { next }); setIsOpen(next); };
-  const onProfileSettings = () => { console.log('[UserMenu] Profile settings clicked', { user }); setShowProfile(true); };
-  const onPrivacy = () => { console.log('[UserMenu] Privacy clicked'); setShowPrivacy(true); };
+  const toggleMenu = () => setIsOpen(!isOpen);
+  const onProfileSettings = () => setShowProfile(true);
+  const onPrivacy = () => setShowPrivacy(true);
 
-  const MenuItem = ({ icon: Icon, label, onClick, danger = false, disabled = false }) => (
-    <button onClick={() => { try { onClick?.(); } catch (e) { console.error('[UserMenu] MenuItem onClick error', e); } if (!disabled) setIsOpen(false); }} disabled={disabled} className={`w-full flex items-center space-x-3 px-4 py-3 text-left transition-colors ${danger ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20' : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-dark-600'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50 dark:hover:bg-dark-600'}`}>
-      <Icon className="w-5 h-5 flex-shrink-0" />
-      <span className="flex-1">{label}</span>
-      {disabled && <LoadingSpinner size="sm" />}
-    </button>
-  );
-
-  const handleSaveProfile = (data) => {
-    console.log('[UserMenu] Save Profile', data);
-    setShowProfile(false);
+  const handleSaveProfile = async (data) => {
+    try {
+      setSaving(true);
+      const payload = { username: data.username, preferences: { theme: data.theme, notifications: data.notifications } };
+      const res = await userService.updateProfile(payload);
+      console.log('[UserMenu] Profile saved', res);
+      setShowProfile(false);
+    } catch (e) {
+      console.error('[UserMenu] Save Profile failed', e);
+    } finally { setSaving(false); }
   };
 
-  const handleSavePrivacy = (data) => {
-    console.log('[UserMenu] Save Privacy', data);
-    setShowPrivacy(false);
+  const handleSavePrivacy = async (data) => {
+    try {
+      setSaving(true);
+      const payload = { preferences: { readReceipts: data.readReceipts, typingIndicators: data.typingIndicators }, totpEnabled: data.totpEnabled };
+      const res = await userService.updatePrivacy(payload);
+      console.log('[UserMenu] Privacy saved', res);
+      setShowPrivacy(false);
+    } catch (e) {
+      console.error('[UserMenu] Save Privacy failed', e);
+    } finally { setSaving(false); }
   };
 
   return (
@@ -85,26 +92,23 @@ const UserMenu = () => {
           </div>
 
           <div className="py-2">
-            <MenuItem icon={User} label="Profile Settings" onClick={onProfileSettings} />
-            <MenuItem icon={Bell} label="Notifications" onClick={()=>console.log('[UserMenu] Notifications clicked')} />
-            <MenuItem icon={Lock} label="Privacy & Security" onClick={onPrivacy} />
-            <MenuItem icon={isDark ? Sun : Moon} label={isDark ? 'Light Mode' : 'Dark Mode'} onClick={toggleTheme} />
-            <MenuItem icon={Settings} label="Settings" onClick={()=>console.log('[UserMenu] Settings clicked')} />
+            <button onClick={onProfileSettings} className="w-full flex items-center space-x-3 px-4 py-3 text-left text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-dark-600"><User className="w-5 h-5" /><span className="flex-1">Profile Settings</span></button>
+            <button onClick={()=>console.log('[UserMenu] Notifications clicked')} className="w-full flex items-center space-x-3 px-4 py-3 text-left text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-dark-600"><Bell className="w-5 h-5" /><span className="flex-1">Notifications</span></button>
+            <button onClick={onPrivacy} className="w-full flex items-center space-x-3 px-4 py-3 text-left text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-dark-600"><Lock className="w-5 h-5" /><span className="flex-1">Privacy & Security</span></button>
+            <button onClick={toggleTheme} className="w-full flex items-center space-x-3 px-4 py-3 text-left text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-dark-600">{isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}<span className="flex-1">{isDark ? 'Light Mode' : 'Dark Mode'}</span></button>
+            <button onClick={()=>console.log('[UserMenu] Settings clicked')} className="w-full flex items-center space-x-3 px-4 py-3 text-left text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-dark-600"><Settings className="w-5 h-5" /><span className="flex-1">Settings</span></button>
           </div>
 
           <div className="border-t border-gray-200 dark:border-dark-700 my-2" />
 
           <div className="py-2">
-            <MenuItem icon={LogOut} label={isLoggingOut ? 'Signing out...' : 'Sign Out'} onClick={handleLogout} danger disabled={isLoggingOut} />
+            <button onClick={handleLogout} disabled={isLoggingOut} className={`w-full flex items-center space-x-3 px-4 py-3 text-left ${isLoggingOut? 'opacity-50 cursor-not-allowed' : ''} text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20`}><LogOut className="w-5 h-5" /><span className="flex-1">{isLoggingOut ? 'Signing out...' : 'Sign Out'}</span>{isLoggingOut && <LoadingSpinner size="sm" />}</button>
           </div>
 
-          <div className="px-4 py-2 border-t border-gray-200 dark:border-dark-700">
-            <p className="text-xs text-gray-400 dark:text-gray-500">P2P Secure Chat v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'} · {typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : ''}</p>
-          </div>
+          <div className="px-4 py-2 border-t border-gray-200 dark:border-dark-700"><p className="text-xs text-gray-400 dark:text-gray-500">P2P Secure Chat v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'} · {typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : ''}</p></div>
         </div>
       )}
 
-      {/* Modals */}
       <ProfileSettingsModal user={user} isOpen={showProfile} onClose={()=>setShowProfile(false)} onSave={handleSaveProfile} />
       <PrivacySecurityModal user={user} isOpen={showPrivacy} onClose={()=>setShowPrivacy(false)} onSave={handleSavePrivacy} />
     </div>
