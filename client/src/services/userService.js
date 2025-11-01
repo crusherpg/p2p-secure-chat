@@ -1,6 +1,3 @@
-/**
- * User Settings Service
- */
 import axios from 'axios';
 
 class UserService {
@@ -14,15 +11,21 @@ class UserService {
     else delete this.api.defaults.headers.common['Authorization'];
   }
 
-  async updateProfile(payload){
-    const { data } = await this.api.put('/users/profile', payload);
-    return data;
+  async listOnline(limit=100){
+    const { data } = await this.api.get(`/users/online`, { params: { limit } });
+    return data?.users || [];
   }
 
-  async updatePrivacy(payload){
-    const { data } = await this.api.put('/users/privacy', payload);
-    return data;
+  async searchUsers(q, limit=20){
+    const { data } = await this.api.get(`/users/search`, { params: { q, limit } });
+    return data?.users || [];
+  }
+
+  async getProfile(){
+    const { data } = await this.api.get(`/users/profile`);
+    return data?.user;
   }
 }
 
 export const userService = new UserService();
+export default userService;
