@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 import Header from '../components/Header';
 import ChatPage from './ChatPage';
-import { ProfileSettingsModal, PrivacySecurityModal } from '../components/SettingsModals';
-import { useAuth } from '../context/AuthContext';
+import SettingsModal from '../components/SettingsModal';
 
 const Shell = () => {
-  const [showSecurity, setShowSecurity] = useState(false);
+  const [open, setOpen] = useState(false);
   const { user } = useAuth();
   return (
     <div className="min-h-screen bg-[var(--bg-app)]">
-      <Header onOpenSettings={() => setShowSecurity(true)} />
+      <Header onOpenSettings={() => setOpen(true)} />
       <ChatPage />
-      <PrivacySecurityModal user={user} isOpen={showSecurity} onClose={() => setShowSecurity(false)} onSave={() => setShowSecurity(false)} />
+      <SettingsModal isOpen={open} onClose={() => setOpen(false)} />
     </div>
   );
 };
