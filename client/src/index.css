@@ -1,1 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 @import './styles/util.css';
+
+@layer base {
+  body { @apply text-gray-800; }
+}
+
+@layer components {
+  /* App Shell */
+  .app-shell { @apply h-screen flex flex-col; }
+  .topbar { @apply h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4; }
+  .status-pill { @apply text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 inline-flex items-center gap-1; }
+  .layout { @apply flex-1 grid grid-cols-[320px,1fr] gap-0 bg-gray-100 dark:bg-gray-950; }
+
+  /* Sidebar */
+  .sidebar { @apply bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col; }
+  .sidebar-head { @apply p-4 border-b border-gray-200 dark:border-gray-800; }
+  .search { @apply w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm outline-none placeholder-gray-400; }
+  .user-item { @apply flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800 cursor-pointer; }
+  .avatar { @apply w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden flex items-center justify-center text-sm font-medium text-gray-700 dark:text-gray-200; }
+
+  /* Main chat */
+  .main { @apply flex flex-col; }
+  .chat-head { @apply h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-5; }
+  .chat-body { @apply flex-1 overflow-y-auto p-6 bg-[#ece5dd]; }
+  .bubble-in { @apply max-w-[70%] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl px-4 py-3 shadow-sm; }
+  .bubble-out { @apply max-w-[70%] bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl px-4 py-3 shadow-sm ml-auto; }
+
+  /* Composer */
+  .composer { @apply bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-3; }
+  .composer-bar { @apply flex items-center gap-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl px-3 py-2; }
+  .icon-btn { @apply w-9 h-9 rounded-lg flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300; }
+  .send-btn { @apply w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700; }
+
+  /* Settings Modal */
+  .settings-modal { @apply fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50; }
+  .settings-content { @apply bg-white dark:bg-gray-900 rounded-2xl w-full max-w-2xl shadow-xl border border-gray-200 dark:border-gray-800; }
+  .settings-header { @apply flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-800; }
+  .settings-tabs { @apply flex items-center gap-2 px-4 border-b border-gray-200 dark:border-gray-800; }
+  .settings-tab { @apply text-sm px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300; }
+  .settings-tab.active { @apply bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300; }
+  .settings-body { @apply p-4 max-h-[70vh] overflow-y-auto; }
+  .settings-section { @apply mb-6; }
+  .settings-section-title { @apply text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3; }
+  .settings-card { @apply w-full flex items-center justify-between p-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900; }
+  .encryption .card-icon { @apply w-8 h-8 rounded-lg bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 flex items-center justify-center mr-3; }
+  .status-badge { @apply text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300; }
+  .dashed-card { @apply border-2 border-dashed; }
+  .privacy-item { @apply flex items-center justify-between p-3 border-b border-gray-100 dark:border-gray-800; }
+  .checkbox { @apply w-4 h-4 accent-blue-600; }
+
+  /* Scrollbars */
+  .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(100,116,139,0.5); border-radius: 8px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background-color: transparent; }
+}
