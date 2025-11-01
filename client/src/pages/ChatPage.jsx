@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Shield, Bell, Search, MoreVertical, Send, Paperclip, Smile, Mic } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { userService } from '../services/userService';
+import userService from '../services/userService';
 import socketService from '../services/socketService';
 
 const Emoji = ({ onPick }) => {
@@ -13,25 +13,25 @@ const Emoji = ({ onPick }) => {
   );
 };
 
-const Sidebar = ({ users, onSelect, activeId, query, setQuery }) => (
+const Sidebar = ({ users, onSelect, activeId, query, setQuery, onSearch }) => (
   <aside className="sidebar">
     <div className="sidebar-head">
       <p className="text-sm font-semibold mb-2">Messages</p>
       <div className="relative">
-        <input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search users..." className="search pl-8" />
+        <input value={query} onChange={(e)=>{ setQuery(e.target.value); onSearch(e.target.value); }} placeholder="Search users..." className="search pl-8" />
         <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-gray-400" />
       </div>
     </div>
     <div className="flex-1 overflow-y-auto">
       {users.map(u => (
         <button key={u.id} onClick={()=>onSelect(u)} className={`user-item ${activeId===u.id ? 'bg-gray-50' : ''}`}>
-          <div className="avatar">{u.avatar ? <img src={u.avatar} alt={u.name} /> : u.name[0]}</div>
+          <div className="avatar">{u.avatar ? <img src={u.avatar} alt={u.name} /> : u.name?.[0] || 'U'}</div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium truncate">{u.name}</p>
+              <p className="text-sm font-medium truncate">{u.username || u.name}</p>
               <span className="text-[11px] text-gray-500">{u.department||''}</span>
             </div>
-            <p className="text-xs text-gray-500 truncate">{u.status === 'online' ? 'Online' : u.status}</p>
+            <p className="text-xs text-gray-500 truncate">{u.status || (u.lastSeen ? 'Last seen' : '')}</p>
           </div>
           <div className={`w-2 h-2 rounded-full ${u.status==='online'?'bg-green-500':u.status==='away'?'bg-yellow-500':u.status==='busy'?'bg-red-500':'bg-gray-400'}`} />
         </button>
@@ -44,35 +44,53 @@ const ChatPage = () => {
   const { user, token, logout } = useAuth();
   const [users, setUsers] = useState([]);
   const [query, setQuery] = useState('');
-  const filtered = useMemo(()=>users.filter(u=>u.name.toLowerCase().includes(query.toLowerCase())),[users,query]);
   const [active, setActive] = useState(null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   useEffect(()=>{ userService.setAuthToken(token); },[token]);
 
-  useEffect(()=>{
-    // Load users from API (fallback to demo)
-    (async ()=>{
-      try {
-        const res = await userService.updatePrivacy({}); // ping API permissions
-        console.log('API reachable');
-      } catch {}
+  const fetchOnline = async () => {
+    setLoadingUsers(true);
+    try {
+      const live = await userService.listOnline(100);
+      // Normalize API -> UI fields
+      const normalized = live.map(u => ({
+        id: u._id || u.id,
+        username: u.username || u.name,
+        name: u.username || u.name,
+        avatar: u.avatar,
+        status: u.status || (u.lastSeen ? 'offline' : 'online'),
+        department: u.department,
+        lastSeen: u.lastSeen
+      }));
+      setUsers(normalized);
+      if (!active && normalized.length) setActive(normalized[0]);
+    } catch (e) {
+      console.warn('Online users fetch failed, falling back to demo:', e?.message);
       setUsers([
         { id:'alice', name:'Alice Cooper', status:'online', department:'Engineering' },
         { id:'bob', name:'Bob Wilson', status:'away', department:'Design' },
         { id:'carol', name:'Carol Davis', status:'online', department:'Marketing' },
         { id:'david', name:'David Chen', status:'busy', department:'Sales' },
       ]);
-    })();
-  },[]);
+    } finally { setLoadingUsers(false); }
+  };
 
-  useEffect(()=>{
-    if (!token) return;
-    try { socketService.connect(token); } catch {}
-    return ()=> socketService.disconnect();
-  },[token]);
+  useEffect(()=>{ fetchOnline(); const t = setInterval(fetchOnline, 15000); return ()=>clearInterval(t); },[]);
+
+  const onSearch = async (q) => {
+    if (!q) { fetchOnline(); return; }
+    try {
+      const res = await userService.searchUsers(q, 20);
+      const normalized = res.map(u => ({ id: u._id || u.id, username: u.username || u.name, name: u.username || u.name, avatar: u.avatar, status: u.status }));
+      setUsers(normalized);
+    } catch (e) { /* ignore and keep current */ }
+  };
+
+  useEffect(()=>{ if (!token) return; try { socketService.connect(token); } catch {} return ()=> socketService.disconnect(); },[token]);
 
   const selectUser = (u) => {
     setActive(u);
@@ -111,20 +129,17 @@ const ChatPage = () => {
         </div>
       </div>
 
-      {/* Two-column layout (no right detail panel) */}
       <div className="layout">
-        <Sidebar users={filtered} onSelect={selectUser} activeId={active?.id} query={query} setQuery={setQuery} />
+        <Sidebar users={users} onSelect={selectUser} activeId={active?.id} query={query} setQuery={setQuery} onSearch={onSearch} />
         <main className="main">
-          {/* Chat header */}
           <div className="chat-head">
             <div>
-              <p className="text-sm font-semibold">{active ? active.name : 'Select a conversation'}</p>
-              {active && <p className="text-xs text-gray-500">{active.status === 'online' ? 'Online' : active.status}</p>}
+              <p className="text-sm font-semibold">{active ? (active.username || active.name) : 'Select a conversation'}</p>
+              {active && <p className="text-xs text-gray-500">{active.status === 'online' ? 'Online' : active.status || ''}</p>}
             </div>
             {active && <div className="status-pill">End-to-end encrypted</div>}
           </div>
 
-          {/* Chat body */}
           <div className="chat-body">
             {!active ? (
               <div className="h-full flex items-center justify-center">
@@ -145,7 +160,6 @@ const ChatPage = () => {
             )}
           </div>
 
-          {/* Composer */}
           <div className="composer">
             <div className="composer-bar relative">
               <button className="icon-btn"><Paperclip className="w-5 h-5" /></button>
