@@ -1,44 +1,93 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Paperclip, Image as ImageIcon, Mic, Smile, Send } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Paperclip, Smile, Mic, Image as ImageIcon, Send } from 'lucide-react';
 
-const MessageInput = ({ onSendMessage, onStartTyping, onStopTyping }) => {
-  const [text, setText] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const typingTimeoutRef = useRef(null);
+const EmojiPicker = ({ onPick }) => {
+  const emojis = ['😀','😂','😍','👍','🙏','🔥','🎉','🥳','❤️','👏','😎','🤖'];
+  return (
+    <div className="absolute bottom-12 left-0 bg-white border border-gray-200 rounded-lg p-2 shadow-lg grid grid-cols-6 gap-1">
+      {emojis.map(e => (
+        <button key={e} onClick={() => onPick(e)} className="text-xl hover:bg-gray-100 rounded p-1">{e}</button>
+      ))}
+    </div>
+  );
+};
 
-  useEffect(() => () => clearTimeout(typingTimeoutRef.current), []);
+const GifPicker = ({ onPick }) => {
+  const gifs = ['https://media.giphy.com/media/ICOgUNjpvO0PC/giphy.gif','https://media.giphy.com/media/l0HUqsz2jdQYElRm0/giphy.gif','https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif'];
+  return (
+    <div className="absolute bottom-12 left-12 bg-white border border-gray-200 rounded-lg p-2 shadow-lg w-64">
+      <p className="text-xs text-gray-500 mb-2">Quick GIFs</p>
+      <div className="grid grid-cols-3 gap-2">
+        {gifs.map((url,i)=> (
+          <button key={i} onClick={() => onPick(url)} className="block w-full h-16 overflow-hidden rounded">
+            <img src={url} alt="gif" className="w-full h-full object-cover" />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
 
-  const handleChange = (e) => {
-    setText(e.target.value);
-    if (!isTyping) { setIsTyping(true); onStartTyping?.(); }
-    clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => { setIsTyping(false); onStopTyping?.(); }, 800);
-  };
+const SpeechToText = ({ onResult }) => {
+  const [listening,setListening] = useState(false);
+  const recRef = useRef(null);
+  
+  useEffect(()=>{
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const rec = new SpeechRecognition();
+      rec.lang = 'en-US';
+      rec.interimResults = true;
+      rec.maxAlternatives = 1;
+      rec.onresult = (e) => {
+        const t = Array.from(e.results).map(r => r[0].transcript).join(' ');
+        onResult(t);
+      };
+      rec.onend = () => setListening(false);
+      recRef.current = rec;
+    }
+  },[onResult]);
 
-  const handleSend = () => {
-    const value = text.trim();
-    if (!value) return;
-    onSendMessage?.({ type: 'text', content: value });
-    setText('');
-  };
-
-  const handleKeyDown = (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleSend();
+  const toggle = () => {
+    if (!recRef.current) return;
+    if (!listening) { recRef.current.start(); setListening(true); }
+    else { recRef.current.stop(); setListening(false); }
   };
 
   return (
-    <div className="px-3 pb-3">
-      <div className="flex items-end space-x-2 bg-white dark:bg-dark-800 border border-gray-200 dark:border-dark-700 rounded-xl p-2 shadow-sm">
-        <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700"><Paperclip className="w-5 h-5 text-gray-500" /></button>
-        <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700"><ImageIcon className="w-5 h-5 text-gray-500" /></button>
-        <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700"><Smile className="w-5 h-5 text-gray-500" /></button>
-        <textarea value={text} onChange={handleChange} onKeyDown={handleKeyDown} placeholder="Type a message…" rows={1} className="flex-1 resize-none bg-transparent outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 p-2" />
-        <button onClick={handleSend} className="p-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white transition-colors"><Send className="w-5 h-5" /></button>
+    <button type="button" onClick={toggle} className={`btn btn-icon w-8 h-8 ${listening ? 'ring-2 ring-blue-500' : ''}`}>
+      <Mic className="w-4 h-4" />
+    </button>
+  );
+};
+
+const MessageInput = ({ onSend }) => {
+  const [text,setText] = useState('');
+  const [showEmoji,setShowEmoji] = useState(false);
+  const [showGif,setShowGif] = useState(false);
+
+  const send = () => {
+    if (!text.trim()) return;
+    onSend(text.trim());
+    setText('');
+  };
+
+  const key = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  };
+
+  return (
+    <div className="message-input relative">
+      <div className="input-container">
+        <button className="btn btn-icon w-8 h-8"><Paperclip className="w-4 h-4" /></button>
+        <textarea className="message-textarea" rows={1} placeholder="Type a message..." value={text} onChange={e=>setText(e.target.value)} onKeyDown={key} />
+        <button type="button" onClick={()=>setShowGif(s=>!s)} className="btn btn-icon w-8 h-8"><ImageIcon className="w-4 h-4" /></button>
+        <button type="button" onClick={()=>setShowEmoji(s=>!s)} className="btn btn-icon w-8 h-8"><Smile className="w-4 h-4" /></button>
+        <SpeechToText onResult={(t)=>setText(t)} />
+        <button onClick={send} disabled={!text.trim()} className="btn btn-send"><Send className="w-4 h-4" /></button>
       </div>
-      <div className="flex justify-between mt-1 px-1">
-        <p className="text-xs text-gray-400">Press Ctrl/⌘ + Enter to send</p>
-        <button className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Voice <Mic className="inline w-3 h-3 ml-1" /></button>
-      </div>
+      {showEmoji && <EmojiPicker onPick={(e)=>{setText(t=>t+e); setShowEmoji(false);}} />}
+      {showGif && <GifPicker onPick={(url)=>{onSend(url); setShowGif(false);}} />}
     </div>
   );
 };
