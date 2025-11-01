@@ -1,259 +1,31 @@
-/* Original P2P Secure Chat Styles - 2025 Design System */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* P2P Enhanced Chat – enterprise gray theme baseline */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  * {
-    box-sizing: border-box;
-  }
-  
-  html {
-    scroll-behavior: smooth;
-    -webkit-text-size-adjust: 100%;
-  }
-  
-  body {
-    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-weight: 400;
-    line-height: 1.5;
-    color: rgb(55, 65, 81);
-    background-color: rgb(249, 250, 251);
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
+:root {
+  --bg-app: #f5f5f7;
+  --surface: #ffffff;
+  --surface-2: #fafafa;
+  --border: #e5e7eb;
+  --muted: #6b7280;
+  --text: #111827;
+  --primary: #2563eb;
+  --success: #22c55e;
+  --warning: #f59e0b;
+}
 
-  .dark body {
-    color: rgb(229, 231, 235);
-    background-color: rgb(17, 24, 39);
-  }
+@layer base {
+  html, body, #root { height: 100%; }
+  body { background: var(--bg-app); font-family: Inter, ui-sans-serif, system-ui; color: var(--text); }
 }
 
 @layer components {
-  /* Animation Classes */
-  .fade-in {
-    animation: fadeIn 0.2s ease-out;
-  }
-  
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(-4px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-  
-  .message-slide-in {
-    animation: messageSlideIn 0.3s ease-out;
-  }
-  
-  @keyframes messageSlideIn {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-  
-  .message-bubble {
-    transition: all 0.2s ease-in-out;
-  }
-  
-  .message-bubble:hover {
-    transform: translateY(-1px);
-  }
-  
-  /* Typing Animation */
-  .typing-dot {
-    animation: typing 1.4s ease-in-out infinite;
-  }
-  
-  .typing-dot:nth-child(1) {
-    animation-delay: 0ms;
-  }
-  
-  .typing-dot:nth-child(2) {
-    animation-delay: 200ms;
-  }
-  
-  .typing-dot:nth-child(3) {
-    animation-delay: 400ms;
-  }
-  
-  @keyframes typing {
-    0%, 60%, 100% {
-      transform: scale(0.8);
-      opacity: 0.6;
-    }
-    30% {
-      transform: scale(1);
-      opacity: 1;
-    }
-  }
-  
-  /* Custom Scrollbar */
-  .scrollbar-thin {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
-  }
-  
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
-  }
-  
-  .scrollbar-thin::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: rgba(156, 163, 175, 0.3);
-    border-radius: 3px;
-  }
-  
-  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: rgba(156, 163, 175, 0.5);
-  }
-  
-  /* Focus States */
-  .focus-ring:focus {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
-  }
-  
-  /* Button Styles */
-  .btn-primary {
-    @apply bg-blue-600 hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 text-white font-medium rounded-lg px-4 py-2 transition-colors;
-  }
-  
-  .btn-secondary {
-    @apply bg-gray-100 hover:bg-gray-200 focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 text-gray-700 font-medium rounded-lg px-4 py-2 transition-colors;
-  }
-  
-  .dark .btn-secondary {
-    @apply bg-gray-700 hover:bg-gray-600 text-gray-200;
-  }
-  
-  /* Input Styles */
-  .input-primary {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors;
-  }
-  
-  .dark .input-primary {
-    @apply bg-gray-800 border-gray-600 text-white placeholder-gray-400 focus:border-blue-400;
-  }
-}
-
-@layer utilities {
-  /* Glass Effect */
-  .glass {
-    background: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-  }
-  
-  .dark .glass {
-    background: rgba(31, 41, 55, 0.8);
-    border: 1px solid rgba(75, 85, 99, 0.3);
-  }
-  
-  /* Text Gradients */
-  .text-gradient {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-  
-  /* Status Indicators */
-  .status-online {
-    @apply w-2 h-2 bg-green-500 rounded-full;
-  }
-  
-  .status-away {
-    @apply w-2 h-2 bg-yellow-500 rounded-full;
-  }
-  
-  .status-busy {
-    @apply w-2 h-2 bg-red-500 rounded-full;
-  }
-  
-  .status-offline {
-    @apply w-2 h-2 bg-gray-400 rounded-full;
-  }
-  
-  /* Message Status Icons */
-  .message-sent {
-    @apply text-gray-400;
-  }
-  
-  .message-delivered {
-    @apply text-gray-500;
-  }
-  
-  .message-read {
-    @apply text-blue-500;
-  }
-}
-
-/* Dark Mode Overrides */
-.dark {
-  color-scheme: dark;
-}
-
-.dark .status-offline {
-  @apply bg-gray-500;
-}
-
-/* Mobile Responsive Adjustments */
-@media (max-width: 768px) {
-  .message-bubble {
-    max-width: calc(100vw - 4rem);
-  }
-  
-  .sidebar {
-    transform: translateX(-100%);
-    transition: transform 0.3s ease-in-out;
-  }
-  
-  .sidebar.open {
-    transform: translateX(0);
-  }
-}
-
-/* Custom Properties for Theme Consistency */
-:root {
-  --primary-50: rgb(239, 246, 255);
-  --primary-100: rgb(219, 234, 254);
-  --primary-500: rgb(59, 130, 246);
-  --primary-600: rgb(37, 99, 235);
-  --primary-700: rgb(29, 78, 216);
-  
-  --gray-50: rgb(249, 250, 251);
-  --gray-100: rgb(243, 244, 246);
-  --gray-200: rgb(229, 231, 235);
-  --gray-300: rgb(209, 213, 219);
-  --gray-400: rgb(156, 163, 175);
-  --gray-500: rgb(107, 114, 128);
-  --gray-600: rgb(75, 85, 99);
-  --gray-700: rgb(55, 65, 81);
-  --gray-800: rgb(31, 41, 55);
-  --gray-900: rgb(17, 24, 39);
-  
-  --success: rgb(16, 185, 129);
-  --warning: rgb(245, 158, 11);
-  --error: rgb(239, 68, 68);
-}
-
-.dark {
-  --gray-50: rgb(17, 24, 39);
-  --gray-100: rgb(31, 41, 55);
-  --gray-800: rgb(243, 244, 246);
-  --gray-900: rgb(249, 250, 251);
+  .app-surface { @apply bg-white border border-gray-200 rounded-xl; }
+  .sidebar { @apply bg-white border-r border-gray-200; }
+  .bubble { @apply rounded-2xl shadow-sm; }
+  .bubble-in { @apply bg-white; }
+  .bubble-out { @apply bg-blue-600 text-white; }
+  .chip-success { @apply text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700; }
 }
