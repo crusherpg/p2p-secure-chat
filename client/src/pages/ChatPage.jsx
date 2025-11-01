@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Shield, Bell, Search, MoreVertical, Send, Paperclip, Smile, Mic, Check, CheckCheck } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Shield, Bell, Search, MoreVertical, Send, Paperclip, Smile, Mic, Check, CheckCheck, Upload, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import userService from '../services/userService';
+import messageService from '../services/messageService';
 import socketService from '../services/socketService';
-import axios from 'axios';
+import toast from 'react-hot-toast';
 
 const useDebouncedCallback = (fn, delay=300) => {
   const t = useRef();
@@ -15,6 +16,35 @@ const useDebouncedCallback = (fn, delay=300) => {
 
 const Spinner = () => (
   <div className="flex items-center justify-center py-3"><div className="w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div></div>
+);
+
+const TypingIndicator = ({ users }) => {
+  if (!users.length) return null;
+  return (
+    <div className="px-4 py-2 text-xs text-gray-500 italic">
+      {users.join(', ')} {users.length === 1 ? 'is' : 'are'} typing...
+    </div>
+  );
+};
+
+const FileUpload = ({ onUpload, onCancel, uploading, progress }) => (
+  <div className="absolute bottom-12 left-0 right-0 bg-white border-t border-gray-200 p-4">
+    <div className="flex items-center justify-between mb-2">
+      <span className="text-sm font-medium">Upload File</span>
+      <button onClick={onCancel} className="p-1"><X className="w-4 h-4" /></button>
+    </div>
+    <div className="flex items-center gap-3">
+      <input type="file" accept="image/*,application/pdf,.txt,.doc,.docx" onChange={(e) => e.target.files[0] && onUpload(e.target.files[0])} className="flex-1 text-sm" disabled={uploading} />
+      {uploading && (
+        <div className="flex-1">
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div className="bg-blue-600 h-2 rounded-full transition-all" style={{width: `${progress}%`}}></div>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">{progress}% uploaded</p>
+        </div>
+      )}
+    </div>
+  </div>
 );
 
 const Emoji = ({ onPick }) => {
@@ -64,13 +94,24 @@ const ChatPage = () => {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [typingUsers, setTypingUsers] = useState([]);
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
 
   // Persist selected conversation
-  useEffect(()=>{ const saved = localStorage.getItem('p2p_active'); if (saved) setActive(JSON.parse(saved)); },[]);
+  useEffect(()=>{ const saved = localStorage.getItem('p2p_active'); if (saved) { try { setActive(JSON.parse(saved)); } catch {} } },[]);
   useEffect(()=>{ if (active) localStorage.setItem('p2p_active', JSON.stringify(active)); },[active]);
 
-  useEffect(()=>{ userService.setAuthToken(token); },[token]);
+  // Initialize services
+  useEffect(()=>{ 
+    userService.setAuthToken(token);
+    messageService.setAuthToken(token);
+  },[token]);
 
   const normalizeUser = (u) => ({
     id: u._id || u.id,
@@ -88,9 +129,9 @@ const ChatPage = () => {
       const live = await userService.listOnline(100);
       const normalized = live.map(normalizeUser);
       setUsers(normalized);
-      if (!active && normalized.length) setActive(normalized[0]);
+      if (!active && normalized.length && !localStorage.getItem('p2p_active')) setActive(normalized[0]);
     } catch (e) {
-      console.warn('Online users fetch failed, falling back to demo:', e?.message);
+      console.warn('Online users fetch failed, using demo:', e?.message);
       setUsers([
         normalizeUser({ id:'alice', name:'Alice Cooper', status:'online', department:'Engineering' }),
         normalizeUser({ id:'bob', name:'Bob Wilson', status:'away', department:'Design' }),
@@ -110,66 +151,193 @@ const ChatPage = () => {
     } catch {}
   }, 300);
 
-  useEffect(()=>{ if (!token) return; try { socketService.connect(token); } catch {} return ()=> socketService.disconnect(); },[token]);
+  // Socket setup
+  useEffect(()=>{
+    if (!token) return;
+    try { socketService.connect(token); } catch {}
+    return () => socketService.disconnect();
+  },[token]);
 
-  // Join specific room for message streaming when active changes
+  // Join/leave conversation rooms
   useEffect(()=>{
     if (!active) return;
-    try { socketService.socket?.emit?.('join_conversation', { userId: active.id }); } catch {}
+    socketService.joinConversation(active.id);
+    return () => socketService.leaveConversation(active.id);
   },[active]);
+
+  // Socket event handlers
+  useEffect(()=>{
+    const newMessageHandler = (msg) => {
+      if (!active || (msg.conversationId !== active.id && msg.from !== active.id && msg.to !== active.id)) return;
+      const normalized = {
+        id: msg.id,
+        from: msg.from === user?.id ? 'me' : 'them',
+        text: msg.content || msg.text,
+        ts: new Date(msg.timestamp).getTime(),
+        status: msg.status || 'delivered',
+        type: msg.type || 'text',
+        attachment: msg.attachment
+      };
+      setMessages(prev => [...prev, normalized]);
+      
+      // Mark as read if chat is active
+      if (document.visibilityState === 'visible' && msg.from !== user?.id) {
+        setTimeout(() => {
+          try { messageService.updateStatus(msg.id, 'read'); } catch {}
+        }, 1000);
+      }
+    };
+
+    const statusHandler = (data) => {
+      setMessages(prev => prev.map(m => m.id === data.messageId ? { ...m, status: data.status } : m));
+    };
+
+    const typingHandler = (data) => {
+      if (data.conversationId === active?.id && data.userId !== user?.id) {
+        setTypingUsers(prev => [...new Set([...prev, data.username || 'Someone'])]);
+      }
+    };
+
+    const stopTypingHandler = (data) => {
+      if (data.conversationId === active?.id) {
+        setTypingUsers(prev => prev.filter(u => u !== (data.username || 'Someone')));
+      }
+    };
+
+    socketService.on('new_message', newMessageHandler);
+    socketService.on('message_status_update', statusHandler);
+    socketService.on('user_typing', typingHandler);
+    socketService.on('user_stop_typing', stopTypingHandler);
+
+    return () => {
+      socketService.off('new_message', newMessageHandler);
+      socketService.off('message_status_update', statusHandler);
+      socketService.off('user_typing', typingHandler);
+      socketService.off('user_stop_typing', stopTypingHandler);
+    };
+  },[active, user?.id]);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const selectUser = async (u) => {
     setActive(u);
-    // Load message history via API
+    setLoadingMessages(true);
     try {
-      const { data } = await axios.get(`${import.meta.env.VITE_API_URL || '/api'}/messages/history`, { params: { userId: u.id } });
-      const history = (data?.messages || []).map(m => ({ id: m.id || m._id, from: m.from === user?.id ? 'me' : 'them', text: m.content, ts: new Date(m.createdAt || m.timestamp).getTime(), status: m.status || 'delivered' }));
-      setMessages(history);
+      const { messages: history } = await messageService.getHistory(u.id);
+      const normalized = history.map(m => ({
+        id: m.id || m._id,
+        from: m.from?.id === user?.id ? 'me' : 'them',
+        text: m.content?.encrypted ? '[Encrypted Message]' : (m.content || m.text || ''),
+        ts: new Date(m.timestamp).getTime(),
+        status: m.status || 'delivered',
+        type: m.type || 'text',
+        attachment: m.attachment
+      }));
+      setMessages(normalized);
     } catch {
-      // fallback demo
+      // Fallback demo messages
       setMessages([
         { id:'m1', from:'them', text:'The UI overhaul is looking fantastic! Much more professional than before.', ts: Date.now()-600000, status:'read' },
         { id:'m2', from:'me', text:'I\'m glad you like it! Tried to balance modern design with enterprise needs.', ts: Date.now()-540000, status:'delivered' },
         { id:'m3', from:'them', text:'The centered layout works really well. Easy to focus on conversations.', ts: Date.now()-300000, status:'read' },
       ]);
+    } finally {
+      setLoadingMessages(false);
     }
   };
-
-  // Receive new messages
-  useEffect(()=>{
-    const handler = (msg) => {
-      if (!active || (msg.from !== active.id && msg.to !== active.id)) return;
-      setMessages(prev => [...prev, { id: msg.id, from: msg.from === user?.id ? 'me' : 'them', text: msg.content, ts: new Date(msg.timestamp).getTime(), status: msg.status || 'delivered' }]);
-    };
-    socketService.on('new_message', handler);
-    return () => socketService.off('new_message', handler);
-  },[active, user?.id]);
-
-  // Status updates (delivered/read)
-  useEffect(()=>{
-    const statusHandler = (data) => {
-      setMessages(prev => prev.map(m => m.id === data.messageId ? { ...m, status: data.status } : m));
-    };
-    socketService.on('message_status_update', statusHandler);
-    return () => socketService.off('message_status_update', statusHandler);
-  },[]);
 
   const send = async () => {
     if (!text.trim() || !active) return;
     const localId = `m-${Date.now()}`;
-    const local = { id: localId, from:'me', text: text.trim(), ts: Date.now(), status:'sent' };
-    setMessages(prev=>[...prev, local]);
+    const localMsg = { id: localId, from:'me', text: text.trim(), ts: Date.now(), status:'sending' };
+    setMessages(prev=>[...prev, localMsg]);
     setText('');
+    
     try {
-      const payload = { to: active.id, content: local.text, type:'text' };
-      socketService.sendMessage(payload);
-    } catch {}
+      // Try socket first, fallback to REST
+      const socketSent = socketService.sendMessage({
+        conversationId: active.id,
+        content: localMsg.text,
+        type: 'text'
+      });
+      
+      if (!socketSent) {
+        // Fallback to REST API
+        await messageService.sendMessage({
+          conversationId: active.id,
+          type: 'text',
+          encryptedContent: btoa(localMsg.text), // Simple base64 for demo
+          iv: 'demo-iv',
+          authTag: 'demo-tag'
+        });
+      }
+      
+      // Update status to sent
+      setMessages(prev => prev.map(m => m.id === localId ? { ...m, status: 'sent' } : m));
+      
+    } catch (error) {
+      console.error('Send failed:', error);
+      setMessages(prev => prev.map(m => m.id === localId ? { ...m, status: 'failed' } : m));
+      toast.error('Failed to send message');
+    }
+  };
+
+  const handleFileUpload = async (file) => {
+    setUploading(true);
+    setUploadProgress(0);
+    
+    try {
+      const result = await messageService.uploadFile(file, (event) => {
+        if (event.lengthComputable) {
+          const progress = Math.round((event.loaded * 100) / event.total);
+          setUploadProgress(progress);
+        }
+      });
+      
+      // Send file message
+      const fileMsg = {
+        id: `f-${Date.now()}`,
+        from: 'me',
+        text: file.name,
+        ts: Date.now(),
+        status: 'sent',
+        type: 'file',
+        attachment: {
+          filename: result.file.filename,
+          originalName: file.name,
+          size: file.size,
+          mimeType: file.type
+        }
+      };
+      
+      setMessages(prev => [...prev, fileMsg]);
+      toast.success('File uploaded successfully');
+      
+    } catch (error) {
+      console.error('Upload failed:', error);
+      toast.error('Failed to upload file');
+    } finally {
+      setUploading(false);
+      setShowUpload(false);
+      setUploadProgress(0);
+    }
+  };
+
+  const handleTyping = () => {
+    if (active) {
+      socketService.startTyping(active.id);
+    }
   };
 
   const StatusTicks = ({ status }) => {
     if (status === 'read') return <CheckCheck className="w-4 h-4 text-blue-600" />;
     if (status === 'delivered') return <CheckCheck className="w-4 h-4 text-gray-400" />;
     if (status === 'sent') return <Check className="w-4 h-4 text-gray-400" />;
+    if (status === 'sending') return <div className="w-4 h-4 border border-gray-400 border-t-transparent rounded-full animate-spin" />;
+    if (status === 'failed') return <X className="w-4 h-4 text-red-500" />;
     return null;
   };
 
@@ -203,7 +371,7 @@ const ChatPage = () => {
             {active && <div className="status-pill">End-to-end encrypted</div>}
           </div>
 
-          <div className="chat-body">
+          <div className="chat-body relative">
             {!active ? (
               <div className="h-full flex items-center justify-center">
                 <div className="bg-white/80 backdrop-blur rounded-2xl border border-gray-200 p-8 text-center shadow-sm max-w-lg">
@@ -212,28 +380,68 @@ const ChatPage = () => {
                 </div>
               </div>
             ) : (
-              <div className="max-w-4xl mx-auto space-y-3">
-                {messages.map(m => (
-                  <div key={m.id} className={m.from==='me' ? 'bubble-out ml-auto' : 'bubble-in'}>
-                    <div className="flex items-end justify-between gap-3">
-                      <p className="text-[15px] flex-1">{m.text}</p>
-                      <StatusTicks status={m.status} />
+              <>
+                {loadingMessages && (
+                  <div className="flex justify-center py-4"><Spinner /></div>
+                )}
+                <div className="max-w-4xl mx-auto space-y-3">
+                  {messages.map(m => (
+                    <div key={m.id} className={m.from==='me' ? 'bubble-out ml-auto' : 'bubble-in'}>
+                      <div className="flex items-end justify-between gap-3">
+                        <div className="flex-1">
+                          {m.type === 'file' ? (
+                            <div className="flex items-center gap-2">
+                              <Paperclip className="w-4 h-4" />
+                              <span className="text-sm">{m.attachment?.originalName || m.text}</span>
+                            </div>
+                          ) : (
+                            <p className="text-[15px]">{m.text}</p>
+                          )}
+                        </div>
+                        {m.from === 'me' && <StatusTicks status={m.status} />}
+                      </div>
+                      <span className="text-[11px] opacity-70 block mt-1">{new Date(m.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                     </div>
-                    <span className="text-[11px] opacity-70 block mt-1">{new Date(m.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                  <div ref={messagesEndRef} />
+                </div>
+                <TypingIndicator users={typingUsers} />
+              </>
+            )}
+            
+            {showUpload && (
+              <FileUpload 
+                onUpload={handleFileUpload}
+                onCancel={() => setShowUpload(false)}
+                uploading={uploading}
+                progress={uploadProgress}
+              />
             )}
           </div>
 
-          <div className="composer">
-            <div className="composer-bar relative">
-              <button className="icon-btn"><Paperclip className="w-5 h-5" /></button>
-              <input value={text} onChange={(e)=>setText(e.target.value)} onKeyDown={(e)=>{ if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Type a message..." className="flex-1 outline-none px-1 py-2 text-[15px]" />
-              <button onClick={()=>setShowEmoji(s=>!s)} className="icon-btn"><Smile className="w-5 h-5" /></button>
+          <div className="composer relative">
+            <div className="composer-bar">
+              <button onClick={() => setShowUpload(true)} className="icon-btn"><Paperclip className="w-5 h-5" /></button>
+              <input 
+                ref={inputRef}
+                value={text} 
+                onChange={(e) => {
+                  setText(e.target.value);
+                  handleTyping();
+                }} 
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    send();
+                  }
+                }} 
+                placeholder="Type a message..." 
+                className="flex-1 outline-none px-1 py-2 text-[15px]" 
+              />
+              <button onClick={() => setShowEmoji(s => !s)} className="icon-btn"><Smile className="w-5 h-5" /></button>
               <button className="icon-btn"><Mic className="w-5 h-5" /></button>
               <button onClick={send} className="send-btn"><Send className="w-4 h-4" /></button>
-              {showEmoji && <Emoji onPick={(e)=>{ setText(t=>t+e); setShowEmoji(false); }} />}
+              {showEmoji && <Emoji onPick={(e) => { setText(t => t + e); setShowEmoji(false); inputRef.current?.focus(); }} />}
             </div>
           </div>
         </main>
