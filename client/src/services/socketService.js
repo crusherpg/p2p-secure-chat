@@ -1,118 +1,148 @@
-import { io } from 'socket.io-client';
-
 class SocketService {
   constructor() {
     this.socket = null;
-    this.listeners = new Map();
     this.isConnected = false;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 5;
+    this.listeners = new Map();
   }
 
-  connect(token) {
-    if (this.socket) {
-      this.disconnect();
+  connect(token = null) {
+    try {
+      // Try to connect, but don't break the app if it fails
+      const url = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000';
+      
+      if (typeof window !== 'undefined' && window.io) {
+        this.socket = window.io(url, {
+          auth: token ? { token } : {},
+          transports: ['websocket', 'polling'],
+          timeout: 5000,
+          reconnection: true,
+          reconnectionAttempts: this.maxReconnectAttempts,
+          reconnectionDelay: 1000
+        });
+
+        this.setupEventHandlers();
+      } else {
+        console.warn('Socket.IO not available, running in offline mode');
+        this.isConnected = false;
+      }
+    } catch (error) {
+      console.warn('Socket connection failed:', error.message);
+      this.isConnected = false;
     }
 
-    // Prefer explicit VITE_SOCKET_URL; fallback to same-origin (http://localhost:5173) but point to :3000 server
-    const serverURL = import.meta.env.VITE_SOCKET_URL || `${window.location.protocol}//${window.location.hostname}:3000`;
+    return this.socket;
+  }
 
-    this.socket = io(serverURL, {
-      auth: { token },
-      transports: ['websocket', 'polling'],
-      upgrade: true,
-      rememberUpgrade: true,
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 500,
-      timeout: 10000
-    });
+  setupEventHandlers() {
+    if (!this.socket) return;
 
     this.socket.on('connect', () => {
-      console.log('🔗 Connected to P2P server', { url: serverURL, id: this.socket.id });
+      console.log('Connected to P2P server');
       this.isConnected = true;
-    });
-
-    this.socket.on('connect_error', (err) => {
-      console.error('🚨 Socket connect_error:', err?.message || err);
-    });
-
-    this.socket.on('error', (error) => {
-      console.error('🚨 Socket error:', error);
+      this.reconnectAttempts = 0;
+      this.emit('connect');
     });
 
     this.socket.on('disconnect', (reason) => {
-      console.warn('📡 Disconnected from P2P server', { reason });
+      console.log('Disconnected from server:', reason);
       this.isConnected = false;
+      this.emit('disconnect', reason);
     });
 
-    // Re-attach existing listeners
-    this.listeners.forEach((callback, event) => {
-      this.socket.on(event, callback);
+    this.socket.on('connect_error', (error) => {
+      console.warn('Connection error:', error.message);
+      this.isConnected = false;
+      this.reconnectAttempts++;
+      
+      if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+        console.warn('Max reconnection attempts reached, running in offline mode');
+      }
     });
 
-    return this.socket;
+    // Message handlers
+    this.socket.on('new_message', (data) => {
+      this.emit('new_message', data);
+    });
+
+    this.socket.on('user_typing', (data) => {
+      this.emit('user_typing', data);
+    });
+
+    this.socket.on('user_stop_typing', (data) => {
+      this.emit('user_stop_typing', data);
+    });
   }
 
   disconnect() {
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
-      this.isConnected = false;
+    }
+    this.isConnected = false;
+    this.listeners.clear();
+  }
+
+  emit(event, data) {
+    const listeners = this.listeners.get(event);
+    if (listeners) {
+      listeners.forEach(callback => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error('Error in socket listener:', error);
+        }
+      });
     }
   }
 
   on(event, callback) {
-    this.listeners.set(event, callback);
-    if (this.socket) {
-      this.socket.on(event, callback);
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set());
+    }
+    this.listeners.get(event).add(callback);
+  }
+
+  off(event, callback) {
+    const listeners = this.listeners.get(event);
+    if (listeners) {
+      listeners.delete(callback);
     }
   }
 
-  off(event) {
-    this.listeners.delete(event);
-    if (this.socket) {
-      this.socket.off(event);
-    }
-  }
-
-  emit(event, data) {
+  sendMessage(data) {
     if (this.socket && this.isConnected) {
-      this.socket.emit(event, data);
-    } else {
-      console.warn('⚠️ Socket not connected, cannot emit:', event);
+      try {
+        this.socket.emit('send_message', data);
+        return true;
+      } catch (error) {
+        console.warn('Failed to send message via socket:', error);
+        return false;
+      }
     }
+    console.warn('Socket not connected, message not sent');
+    return false;
   }
 
-  // Typing indicators
   startTyping(conversationId) {
-    this.emit('typing_start', { conversationId });
+    if (this.socket && this.isConnected) {
+      try {
+        this.socket.emit('start_typing', { conversationId });
+      } catch (error) {
+        console.warn('Failed to send typing indicator:', error);
+      }
+    }
   }
 
   stopTyping(conversationId) {
-    this.emit('typing_stop', { conversationId });
-  }
-
-  // Send message
-  sendMessage(messageData) {
-    this.emit('send_message', messageData);
-  }
-
-  // Mark message as read
-  markMessageRead(messageId, conversationId) {
-    this.emit('message_read', { messageId, conversationId });
-  }
-
-  // Create conversation
-  createConversation(participantId) {
-    this.emit('create_conversation', { participantId });
-  }
-
-  // File upload notification
-  notifyFileUpload(conversationId, filename) {
-    this.emit('file_uploaded', { conversationId, filename });
-  }
-
-  getSocket() {
-    return this.socket;
+    if (this.socket && this.isConnected) {
+      try {
+        this.socket.emit('stop_typing', { conversationId });
+      } catch (error) {
+        console.warn('Failed to send stop typing indicator:', error);
+      }
+    }
   }
 
   isSocketConnected() {
@@ -121,3 +151,4 @@ class SocketService {
 }
 
 export const socketService = new SocketService();
+export default socketService;
