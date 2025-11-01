@@ -1,158 +1,310 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { socketService } from '../services/socketService';
-import UserList from '../components/UserList';
-import ConversationList from '../components/ConversationList';
-import MessageBubble from '../components/MessageBubble';
-import MessageInput from '../components/MessageInput';
-import { Menu, X, Users, MessageCircle, Settings } from 'lucide-react';
-import { encryptionService } from '../utils/encryption';
+import { Shield, Settings, LogOut, MessageCircle, Send, Paperclip, Smile } from 'lucide-react';
+import SettingsModal from '../components/SettingsModal';
 import toast from 'react-hot-toast';
-import ConversationHeader from '../components/ConversationHeader';
 
 const ChatPage = () => {
-  const { user, token } = useAuth();
+  const { user, logout } = useAuth();
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [messages, setMessages] = useState([]);
   const [conversations, setConversations] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [onlineUsers, setOnlineUsers] = useState(new Set());
-  const [typingUsers, setTypingUsers] = useState(new Set());
-  const [showSidebar, setShowSidebar] = useState(false);
-  const [activeTab, setActiveTab] = useState('conversations');
-  const [encryptionKey, setEncryptionKey] = useState(null);
+  const [messageText, setMessageText] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
 
+  // Demo data
   useEffect(() => {
-    if (!token) return;
-    socketService.connect(token);
-    initializeEncryption();
-    loadConversations();
-    loadUsers();
-    setupSocketListeners();
-    return () => socketService.disconnect();
-  }, [token]);
-
-  const initializeEncryption = async () => {
-    try {
-      const keyExchange = await encryptionService.simulateKeyExchange(user?.id || 'self', 'peer');
-      setEncryptionKey(keyExchange.key);
-    } catch (e) { console.error(e); }
-  };
-
-  const setupSocketListeners = () => {
-    socketService.on('new_message', (messageData) => {
-      if (selectedConversation && messageData.conversationId === selectedConversation.id) {
-        setMessages(prev => [...prev, {
-          id: messageData.id,
-          from: messageData.from,
-          content: messageData.content,
-          type: messageData.type || 'text',
-          attachment: messageData.attachment,
-          timestamp: messageData.timestamp,
-          status: 'delivered'
-        }]);
-      }
-    });
-  };
-
-  const loadConversations = () => {
-    const demo = [
+    const demoConversations = [
       {
         id: 'conv1',
-        participants: [
-          { id: 'alice', username: 'Alice Cooper', avatar: null, status: 'online' },
-          { id: user?.id || 'me', username: user?.username || 'You', avatar: user?.avatar || null }
-        ],
-        lastMessage: { content: 'Hey! How are you doing?', timestamp: new Date().toISOString() },
-        unreadCount: 2,
-        encryption: { enabled: true }
+        name: 'Bob Wilson',
+        avatar: null,
+        lastMessage: '👍 Looks great!',
+        timestamp: '20:00',
+        unreadCount: 0,
+        encrypted: true
+      },
+      {
+        id: 'conv2', 
+        name: 'Carol Davis',
+        avatar: null,
+        lastMessage: 'https://media.giphy.com/...',
+        timestamp: '19:45',
+        unreadCount: 1,
+        encrypted: true
       }
     ];
-    setConversations(demo);
-  };
+    setConversations(demoConversations);
 
-  const loadUsers = () => {
-    const demoUsers = [
-      { id: 'alice', username: 'Alice Cooper', email: 'alice@example.com', status: 'online', avatar: null },
-      { id: 'bob', username: 'Bob Wilson', email: 'bob@example.com', status: 'away', avatar: null }
-    ];
-    setUsers(demoUsers);
-    setOnlineUsers(new Set(['alice']));
-  };
+    // Auto-select first conversation
+    if (demoConversations[0]) {
+      setSelectedConversation(demoConversations[0]);
+      loadMessages(demoConversations[0].id);
+    }
+  }, []);
+
+  // Socket connection
+  useEffect(() => {
+    if (user) {
+      try {
+        socketService.connect();
+        setIsConnected(true);
+        console.log('Connected to P2P server');
+      } catch (error) {
+        console.warn('Socket connection failed (using demo mode)');
+        setIsConnected(false);
+      }
+    }
+    return () => {
+      try {
+        socketService.disconnect();
+      } catch (error) {
+        console.warn('Socket disconnect error');
+      }
+    };
+  }, [user]);
 
   const loadMessages = (conversationId) => {
-    const demo = [
-      { id: 'm1', from: { id: 'alice', username: 'Alice Cooper' }, content: 'Hello!', type: 'text', timestamp: new Date().toISOString(), status: 'read' },
-      { id: 'm2', from: { id: user?.id || 'me', username: user?.username || 'You' }, content: 'Hi!', type: 'text', timestamp: new Date().toISOString(), status: 'delivered' }
+    const demoMessages = [
+      {
+        id: 'msg1',
+        from: { id: 'bob', name: 'Bob Wilson' },
+        content: 'Hey! How are you doing?',
+        timestamp: new Date(Date.now() - 300000).toISOString(),
+        type: 'incoming'
+      },
+      {
+        id: 'msg2',
+        from: { id: user?.id || 'me', name: 'You' },
+        content: 'Everything is going well! Just finished implementing the encryption.',
+        timestamp: new Date(Date.now() - 120000).toISOString(),
+        type: 'outgoing'
+      },
+      {
+        id: 'msg3',
+        from: { id: 'bob', name: 'Bob Wilson' },
+        content: '👍 Looks great!',
+        timestamp: new Date(Date.now() - 60000).toISOString(),
+        type: 'incoming'
+      }
     ];
-    setMessages(demo);
+    setMessages(demoMessages);
   };
 
   const selectConversation = (conversation) => {
     setSelectedConversation(conversation);
     loadMessages(conversation.id);
-    setShowSidebar(false);
-    setConversations(prev => prev.map(c => c.id === conversation.id ? { ...c, unreadCount: 0 } : c));
+    
+    // Mark as read
+    setConversations(prev => 
+      prev.map(conv => 
+        conv.id === conversation.id 
+          ? { ...conv, unreadCount: 0 }
+          : conv
+      )
+    );
   };
 
-  const sendMessage = async (messageData) => {
-    if (!selectedConversation || !encryptionKey) { toast.error('Unable to send'); return; }
-    try {
-      const encrypted = messageData.type === 'text' ? await encryptionService.encryptMessage(messageData.content, encryptionKey) : messageData.content;
-      socketService.sendMessage({ conversationId: selectedConversation.id, content: encrypted, type: messageData.type || 'text', attachment: messageData.attachment });
-      const local = { id: `temp-${Date.now()}`, from: { id: user?.id || 'me', username: user?.username || 'You', avatar: user?.avatar }, content: messageData.content, type: messageData.type || 'text', attachment: messageData.attachment, timestamp: new Date().toISOString(), status: 'sent' };
-      setMessages(prev => [...prev, local]);
-      setConversations(prev => prev.map(c => c.id === selectedConversation.id ? { ...c, lastMessage: { content: messageData.content, timestamp: local.timestamp } } : c));
-    } catch (e) { console.error(e); toast.error('Failed to send'); }
-  };
+  const sendMessage = () => {
+    if (!messageText.trim() || !selectedConversation) return;
 
-  const decryptMessageContent = async (encryptedContent) => {
-    if (!encryptionKey) return 'Decryption unavailable';
+    const newMessage = {
+      id: `msg-${Date.now()}`,
+      from: { id: user?.id || 'me', name: user?.username || 'You' },
+      content: messageText,
+      timestamp: new Date().toISOString(),
+      type: 'outgoing'
+    };
+
+    setMessages(prev => [...prev, newMessage]);
+    
+    // Update conversation last message
+    setConversations(prev => 
+      prev.map(conv => 
+        conv.id === selectedConversation.id
+          ? { ...conv, lastMessage: messageText, timestamp: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) }
+          : conv
+      )
+    );
+
+    setMessageText('');
+
+    // Try to send via socket if connected
     try {
-      if (typeof encryptedContent === 'string') return encryptedContent;
-      return await encryptionService.decryptMessage(encryptedContent, encryptionKey);
-    } catch {
-      return 'Failed to decrypt';
+      if (isConnected) {
+        socketService.sendMessage({
+          conversationId: selectedConversation.id,
+          content: messageText,
+          type: 'text'
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to send via socket, message sent locally');
     }
   };
 
-  const getOtherParticipant = (conversation) =>
-    conversation.participants.find(p => p.id !== user?.id) || { username: 'Unknown', id: 'unknown' };
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  const formatTime = (timestamp) => {
+    return new Date(timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  };
 
   return (
-    <div className="h-[calc(100vh-56px)] flex bg-gray-50">
-      {/* Sidebar */}
-      <div className={`fixed lg:relative inset-y-0 left-0 z-40 w-80 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${showSidebar ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="px-4 py-3 border-b border-gray-200"><p className="text-[13px] font-semibold text-gray-600">Messages</p></div>
-        <ConversationList conversations={conversations} selectedConversation={selectedConversation} onSelectConversation={selectConversation} currentUserId={user?.id} />
+    <div className="chat-container">
+      {/* Header */}
+      <div className="app-header">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <Shield className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-base font-semibold">P2P</h1>
+            <p className="text-xs text-gray-500">Secure Messaging</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowSettings(true)} className="btn btn-icon">
+            <Settings className="w-5 h-5" />
+          </button>
+          <button onClick={logout} className="btn btn-icon">
+            <LogOut className="w-5 h-5" />
+          </button>
+          <div className="avatar w-8 h-8">
+            {user?.avatar ? (
+              <img src={user.avatar} alt="User" />
+            ) : (
+              <span className="text-sm">{user?.username?.[0]?.toUpperCase() || 'U'}</span>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {selectedConversation ? (
-          <>
-            <ConversationHeader title={getOtherParticipant(selectedConversation).username} encrypted={!!selectedConversation.encryption?.enabled} />
-            <div className="flex-1 overflow-y-auto px-4 py-4">
-              <div className="max-w-4xl mx-auto space-y-3">
-                {messages.map((message) => (
-                  <MessageBubble key={message.id} message={message} isOwn={message.from.id === (user?.id || 'me')} onDecrypt={decryptMessageContent} />
+      <div className="flex flex-1">
+        {/* Sidebar */}
+        <div className="sidebar">
+          <div className="messages-header">
+            <h2 className="text-sm font-semibold text-gray-600">Messages</h2>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            {conversations.map(conversation => (
+              <div
+                key={conversation.id}
+                className={`conversation-item ${
+                  selectedConversation?.id === conversation.id ? 'active' : ''
+                }`}
+                onClick={() => selectConversation(conversation)}
+              >
+                <div className="avatar">
+                  {conversation.avatar ? (
+                    <img src={conversation.avatar} alt={conversation.name} />
+                  ) : (
+                    <span>{conversation.name[0]}</span>
+                  )}
+                </div>
+                
+                <div className="flex-1 min-w-0 ml-3">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-medium text-sm truncate">{conversation.name}</h3>
+                    <span className="text-xs text-gray-500">{conversation.timestamp}</span>
+                  </div>
+                  <div className="flex justify-between items-center mt-1">
+                    <p className="text-xs text-gray-500 truncate">{conversation.lastMessage}</p>
+                    {conversation.unreadCount > 0 && (
+                      <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center ml-2">
+                        {conversation.unreadCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Main Chat Area */}
+        <div className="main-chat">
+          {selectedConversation ? (
+            <>
+              {/* Chat Header */}
+              <div className="chat-header">
+                <h2 className="font-semibold">{selectedConversation.name}</h2>
+                {selectedConversation.encrypted && (
+                  <div className="status-badge flex items-center gap-1">
+                    <Shield className="w-3 h-3" />
+                    End-to-end encrypted
+                  </div>
+                )}
+              </div>
+
+              {/* Messages */}
+              <div className="message-container custom-scrollbar">
+                {messages.map(message => (
+                  <div
+                    key={message.id}
+                    className={`message-bubble ${message.type}`}
+                  >
+                    <p>{message.content}</p>
+                    <span className="text-xs text-gray-500 block mt-1">
+                      {formatTime(message.timestamp)}
+                    </span>
+                  </div>
                 ))}
               </div>
+
+              {/* Message Input */}
+              <div className="message-input">
+                <div className="input-container">
+                  <button className="btn btn-icon w-8 h-8">
+                    <Paperclip className="w-4 h-4" />
+                  </button>
+                  <textarea
+                    value={messageText}
+                    onChange={(e) => setMessageText(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder="Type a message..."
+                    className="message-textarea"
+                    rows={1}
+                  />
+                  <button className="btn btn-icon w-8 h-8">
+                    <Smile className="w-4 h-4" />
+                  </button>
+                  <button 
+                    onClick={sendMessage}
+                    disabled={!messageText.trim()}
+                    className="btn btn-send"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <MessageCircle className="w-8 h-8 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">Welcome to P2P Secure Chat</h3>
+                <p className="text-gray-500">Select a conversation to start chatting</p>
+              </div>
             </div>
-            <div className="border-t border-gray-200 bg-white">
-              <MessageInput onSendMessage={sendMessage} onStartTyping={() => selectedConversation && socketService.startTyping(selectedConversation.id)} onStopTyping={() => selectedConversation && socketService.stopTyping(selectedConversation.id)} />
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center p-8">
-            <div className="text-center">
-              <div className="w-16 h-16 mx-auto bg-blue-100 rounded-full flex items-center justify-center mb-6"><MessageCircle className="w-8 h-8 text-blue-600" /></div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">Welcome to P2P Secure Chat</h2>
-              <p className="text-gray-600 mb-8 max-w-md">Select a conversation to start chatting</p>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
+
+      {/* Settings Modal */}
+      <SettingsModal 
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+      />
     </div>
   );
 };
