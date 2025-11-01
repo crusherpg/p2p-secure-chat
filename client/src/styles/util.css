@@ -1,0 +1,7 @@
+/* Utility components */
+.input-primary{ @apply w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all; }
+.btn-primary{ @apply inline-flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm px-4 py-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed; }
+
+/* Login specific */
+.login-bg{ background: radial-gradient(1200px 600px at 10% -10%, rgba(37,99,235,0.15), transparent), radial-gradient(800px 400px at 90% 110%, rgba(99,102,241,0.15), transparent); }
+.dark .login-bg{ background: radial-gradient(1200px 600px at 10% -10%, rgba(37,99,235,0.25), transparent), radial-gradient(800px 400px at 90% 110%, rgba(99,102,241,0.25), transparent); }
