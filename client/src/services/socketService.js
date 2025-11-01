@@ -11,7 +11,6 @@ class SocketService {
   connect(token = null) {
     try {
       const url = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000';
-      
       if (typeof window !== 'undefined' && window.io) {
         this.socket = window.io(url, {
           auth: token ? { token } : {},
@@ -21,7 +20,6 @@ class SocketService {
           reconnectionAttempts: this.maxReconnectAttempts,
           reconnectionDelay: 1000
         });
-
         this.setupEventHandlers();
       } else {
         console.warn('Socket.IO not available, running in offline mode');
@@ -31,201 +29,55 @@ class SocketService {
       console.warn('Socket connection failed:', error.message);
       this.isConnected = false;
     }
-
     return this.socket;
   }
 
   setupEventHandlers() {
     if (!this.socket) return;
 
-    this.socket.on('connect', () => {
-      console.log('🟢 Connected to P2P server');
-      this.isConnected = true;
-      this.reconnectAttempts = 0;
-      this.emit('connect');
-    });
+    this.socket.on('connect', () => { this.isConnected = true; this.emit('connect'); });
+    this.socket.on('disconnect', () => { this.isConnected = false; this.emit('disconnect'); });
 
-    this.socket.on('disconnect', (reason) => {
-      console.log('🔴 Disconnected from server:', reason);
-      this.isConnected = false;
-      this.emit('disconnect', reason);
-    });
+    // Server uses user_status_change, not user_online/offline
+    this.socket.on('user_status_change', (data) => { this.emit('user_status_change', data); });
 
-    this.socket.on('connect_error', (error) => {
-      console.warn('🟡 Connection error:', error.message);
-      this.isConnected = false;
-      this.reconnectAttempts++;
-      
-      if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-        console.warn('❌ Max reconnection attempts reached, running in offline mode');
-      }
-    });
+    this.socket.on('new_message', (data) => { this.emit('new_message', data); });
+    this.socket.on('message_status_update', (data) => { this.emit('message_status_update', data); });
+    this.socket.on('user_typing', (data) => { this.emit('user_typing', data); });
+    this.socket.on('user_stop_typing', (data) => { this.emit('user_stop_typing', data); });
 
-    // Message handlers
-    this.socket.on('new_message', (data) => {
-      console.log('📨 New message received:', data);
-      this.emit('new_message', data);
-    });
-
-    this.socket.on('message_status_update', (data) => {
-      console.log('✅ Message status update:', data);
-      this.emit('message_status_update', data);
-    });
-
-    // Typing handlers
-    this.socket.on('user_typing', (data) => {
-      this.emit('user_typing', data);
-    });
-
-    this.socket.on('user_stop_typing', (data) => {
-      this.emit('user_stop_typing', data);
-    });
-
-    // Presence handlers
-    this.socket.on('user_online', (data) => {
-      this.emit('user_online', data);
-    });
-
-    this.socket.on('user_offline', (data) => {
-      this.emit('user_offline', data);
-    });
+    // Ack of send
+    this.socket.on('message_sent', (data) => { this.emit('message_sent', data); });
   }
 
-  disconnect() {
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-    }
-    this.isConnected = false;
-    this.listeners.clear();
-    if (this.typingTimer) {
-      clearTimeout(this.typingTimer);
-    }
+  on(event, cb){ if (!this.listeners.has(event)) this.listeners.set(event, new Set()); this.listeners.get(event).add(cb); }
+  off(event, cb){ const set=this.listeners.get(event); if (set) set.delete(cb); }
+
+  joinConversation(conversationId){ if(this.socket&&this.isConnected) this.socket.emit('join_conversation', { conversationId }); }
+  leaveConversation(conversationId){ if(this.socket&&this.isConnected) this.socket.emit('leave_conversation', { conversationId }); }
+
+  // IMPORTANT: align payload with server contract (expects encryptedContent/iv/authTag)
+  sendMessage({ conversationId, content, type='text', attachment }){
+    if (!(this.socket && this.isConnected)) return false;
+    try {
+      const payload = {
+        conversationId,
+        type,
+        encryptedContent: btoa(content || ''),
+        iv: 'demo-iv',
+        authTag: 'demo-tag',
+        attachment
+      };
+      this.socket.emit('send_message', payload);
+      return true;
+    } catch (e){ console.warn('socket send failed', e); return false; }
   }
 
-  emit(event, data) {
-    const listeners = this.listeners.get(event);
-    if (listeners) {
-      listeners.forEach(callback => {
-        try {
-          callback(data);
-        } catch (error) {
-          console.error('❌ Error in socket listener:', error);
-        }
-      });
-    }
-  }
+  startTyping(conversationId){ if(this.socket&&this.isConnected) this.socket.emit('typing_start',{ conversationId }); }
+  stopTyping(conversationId){ if(this.socket&&this.isConnected) this.socket.emit('typing_stop',{ conversationId }); }
+  updateMessageStatus(messageId, status, conversationId){ if(this.socket&&this.isConnected) this.socket.emit('message_read',{ messageId, conversationId, status }); }
 
-  on(event, callback) {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
-    }
-    this.listeners.get(event).add(callback);
-  }
-
-  off(event, callback) {
-    const listeners = this.listeners.get(event);
-    if (listeners) {
-      listeners.delete(callback);
-    }
-  }
-
-  // Join specific conversation room
-  joinConversation(conversationId) {
-    if (this.socket && this.isConnected) {
-      try {
-        this.socket.emit('join_conversation', { conversationId });
-        console.log(`🏠 Joined conversation: ${conversationId}`);
-      } catch (error) {
-        console.warn('❌ Failed to join conversation:', error);
-      }
-    }
-  }
-
-  // Leave conversation room
-  leaveConversation(conversationId) {
-    if (this.socket && this.isConnected) {
-      try {
-        this.socket.emit('leave_conversation', { conversationId });
-        console.log(`🚪 Left conversation: ${conversationId}`);
-      } catch (error) {
-        console.warn('❌ Failed to leave conversation:', error);
-      }
-    }
-  }
-
-  // Send message via socket
-  sendMessage(data) {
-    if (this.socket && this.isConnected) {
-      try {
-        this.socket.emit('send_message', data);
-        console.log('📤 Message sent via socket:', data);
-        return true;
-      } catch (error) {
-        console.warn('❌ Failed to send message via socket:', error);
-        return false;
-      }
-    }
-    console.warn('⚠️ Socket not connected, message not sent');
-    return false;
-  }
-
-  // Typing indicators
-  startTyping(conversationId) {
-    if (this.socket && this.isConnected) {
-      try {
-        this.socket.emit('start_typing', { conversationId });
-        
-        // Auto-stop typing after 3 seconds
-        if (this.typingTimer) clearTimeout(this.typingTimer);
-        this.typingTimer = setTimeout(() => {
-          this.stopTyping(conversationId);
-        }, 3000);
-      } catch (error) {
-        console.warn('❌ Failed to send typing indicator:', error);
-      }
-    }
-  }
-
-  stopTyping(conversationId) {
-    if (this.socket && this.isConnected) {
-      try {
-        this.socket.emit('stop_typing', { conversationId });
-        if (this.typingTimer) {
-          clearTimeout(this.typingTimer);
-          this.typingTimer = null;
-        }
-      } catch (error) {
-        console.warn('❌ Failed to send stop typing indicator:', error);
-      }
-    }
-  }
-
-  // Update message status
-  updateMessageStatus(messageId, status) {
-    if (this.socket && this.isConnected) {
-      try {
-        this.socket.emit('message_status', { messageId, status });
-      } catch (error) {
-        console.warn('❌ Failed to update message status:', error);
-      }
-    }
-  }
-
-  // Update user status
-  updateUserStatus(status) {
-    if (this.socket && this.isConnected) {
-      try {
-        this.socket.emit('user_status', { status });
-      } catch (error) {
-        console.warn('❌ Failed to update user status:', error);
-      }
-    }
-  }
-
-  isSocketConnected() {
-    return this.isConnected;
-  }
+  isSocketConnected(){ return this.isConnected; }
 }
 
 export const socketService = new SocketService();
