@@ -1,157 +1,42 @@
 import React from 'react';
-import { MessageCircle, Pin } from 'lucide-react';
+import { Check, CheckCheck } from 'lucide-react';
 
-const ConversationList = ({ conversations, selectedConversation, onSelectConversation }) => {
-  const formatTime = (timestamp) => {
-    if (!timestamp) return '';
-    
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffHours < 1) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-    } else if (diffDays < 1) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-    } else if (diffDays < 7) {
-      return date.toLocaleDateString([], { weekday: 'short' });
-    } else {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    }
-  };
-
-  const truncateMessage = (message, maxLength = 50) => {
-    if (!message) return '';
-    if (message.length <= maxLength) return message;
-    return message.substring(0, maxLength) + '...';
-  };
-
-  const getOtherParticipant = (conversation, currentUserId) => {
-    return conversation.participants?.find(p => p.id !== currentUserId);
-  };
-
-  if (conversations.length === 0) {
-    return (
-      <div className="p-8 text-center">
-        <MessageCircle className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-        <p className="text-gray-500 dark:text-gray-400 mb-2">
-          No conversations yet
-        </p>
-        <p className="text-sm text-gray-400 dark:text-gray-500">
-          Start a new conversation from the Contacts tab
-        </p>
-      </div>
-    );
-  }
-
+const ConversationList = ({ conversations = [], selectedConversation, onSelectConversation, currentUserId }) => {
   return (
-    <div className="divide-y divide-gray-200 dark:divide-dark-600">
-      {conversations.map((conversation) => {
-        const otherParticipant = getOtherParticipant(conversation, 'current-user-id'); // In real app, use actual user ID
-        const isSelected = selectedConversation?.id === conversation.id;
-        
-        return (
-          <div
-            key={conversation.id}
-            className={`p-4 cursor-pointer transition-colors ${
-              isSelected
-                ? 'bg-primary-50 dark:bg-primary-900/20 border-r-2 border-primary-600'
-                : 'hover:bg-gray-50 dark:hover:bg-dark-700'
-            }`}
-            onClick={() => onSelectConversation(conversation)}
-          >
-            <div className="flex items-center space-x-3">
-              {/* Avatar */}
-              <div className="flex-shrink-0 relative">
-                <div className="w-12 h-12 bg-primary-600 rounded-full flex items-center justify-center">
-                  {otherParticipant?.avatar ? (
-                    <img
-                      src={otherParticipant.avatar}
-                      alt={otherParticipant.username}
-                      className="w-12 h-12 rounded-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-white font-medium text-lg">
-                      {otherParticipant?.username?.[0]?.toUpperCase() || 'U'}
-                    </span>
-                  )}
+    <aside className="sidebar w-80 hidden lg:flex flex-col">
+      <div className="px-4 py-3 border-b border-gray-200">
+        <p className="text-[13px] font-semibold text-gray-600">Messages</p>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {conversations.map(conv => {
+          const other = conv.participants.find(p => p.id !== currentUserId) || conv.participants[0];
+          const active = selectedConversation?.id === conv.id;
+          return (
+            <button key={conv.id} onClick={() => onSelectConversation(conv)} className={`w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-gray-50 ${active ? 'bg-gray-50' : ''}`}>
+              <div className="flex items-center">
+                <div className="relative w-9 h-9 rounded-full overflow-hidden bg-gray-200">
+                  {other.avatar ? <img src={other.avatar} alt={other.username} /> : <div className="w-full h-full flex items-center justify-center text-xs font-medium">{other.username?.[0]}</div>}
                 </div>
-                
-                {/* Online Status Indicator */}
-                {otherParticipant?.status === 'online' && (
-                  <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-dark-800" />
-                )}
-              </div>
-
-              {/* Conversation Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <h3 className={`text-sm font-semibold truncate ${
-                      isSelected
-                        ? 'text-primary-700 dark:text-primary-300'
-                        : 'text-gray-900 dark:text-white'
-                    }`}>
-                      {otherParticipant?.username || 'Unknown User'}
-                    </h3>
-                    
-                    {conversation.pinned && (
-                      <Pin className="w-3 h-3 text-gray-400" />
-                    )}
+                <div className="ml-3 min-w-0 flex-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium truncate">{other.username}</p>
+                    <span className="text-[11px] text-gray-500">{new Date(conv.lastMessage.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                   </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    {conversation.lastMessage?.timestamp && (
-                      <span className={`text-xs ${
-                        isSelected
-                          ? 'text-primary-600 dark:text-primary-400'
-                          : 'text-gray-500 dark:text-gray-400'
-                      }`}>
-                        {formatTime(conversation.lastMessage.timestamp)}
-                      </span>
-                    )}
-                    
-                    {/* Unread Count */}
-                    {conversation.unreadCount > 0 && (
-                      <div className="bg-primary-600 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                        {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
-                      </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-gray-500 truncate">{typeof conv.lastMessage.content === 'string' ? conv.lastMessage.content : 'Encrypted message'}</p>
+                    {conv.unreadCount > 0 ? (
+                      <span className="ml-2 min-w-[18px] h-[18px] rounded-full bg-blue-600 text-white text-[11px] flex items-center justify-center">{conv.unreadCount}</span>
+                    ) : (
+                      <CheckCheck className="w-4 h-4 text-gray-400" />
                     )}
                   </div>
                 </div>
-                
-                {/* Last Message */}
-                {conversation.lastMessage && (
-                  <div className="mt-1 flex items-center">
-                    <p className={`text-sm truncate flex-1 ${
-                      conversation.unreadCount > 0
-                        ? 'font-medium text-gray-900 dark:text-white'
-                        : 'text-gray-500 dark:text-gray-400'
-                    }`}>
-                      {truncateMessage(conversation.lastMessage.content)}
-                    </p>
-                  </div>
-                )}
-                
-                {/* Typing Indicator */}
-                {conversation.typing && (
-                  <div className="mt-1 flex items-center space-x-1">
-                    <div className="flex space-x-1">
-                      <div className="w-1 h-1 bg-primary-500 rounded-full typing-dot"></div>
-                      <div className="w-1 h-1 bg-primary-500 rounded-full typing-dot"></div>
-                      <div className="w-1 h-1 bg-primary-500 rounded-full typing-dot"></div>
-                    </div>
-                    <span className="text-xs text-primary-500">typing...</span>
-                  </div>
-                )}
               </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
+            </button>
+          );
+        })}
+      </div>
+    </aside>
   );
 };
 
