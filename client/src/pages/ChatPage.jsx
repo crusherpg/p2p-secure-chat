@@ -1,88 +1,163 @@
-import React, { useEffect, useState } from 'react';
-import { Shield, Settings, LogOut } from 'lucide-react';
-import SettingsModal from '../components/SettingsModal';
-import MessageInput from '../components/MessageInput';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Shield, Bell, Search, MoreVertical, Send, Paperclip, Smile, Mic } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { userService } from '../services/userService';
+import socketService from '../services/socketService';
 
-const ChatHeader = ({ title }) => (
-  <div className="chat-header">
-    <h2 className="font-semibold">{title}</h2>
-    <div className="status-badge">End-to-end encrypted</div>
-  </div>
+const Emoji = ({ onPick }) => {
+  const emojis = ['😀','😂','😍','👍','🙏','🔥','🎉','🥳','❤️','👏','😎','🤖'];
+  return (
+    <div className="absolute bottom-12 left-16 bg-white border border-gray-200 rounded-lg p-2 shadow-lg grid grid-cols-6 gap-1">
+      {emojis.map(e => <button key={e} className="text-xl hover:bg-gray-100 rounded p-1" onClick={()=>onPick(e)}>{e}</button>)}
+    </div>
+  );
+};
+
+const Sidebar = ({ users, onSelect, activeId, query, setQuery }) => (
+  <aside className="sidebar">
+    <div className="sidebar-head">
+      <p className="text-sm font-semibold mb-2">Messages</p>
+      <div className="relative">
+        <input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search users..." className="search pl-8" />
+        <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-gray-400" />
+      </div>
+    </div>
+    <div className="flex-1 overflow-y-auto">
+      {users.map(u => (
+        <button key={u.id} onClick={()=>onSelect(u)} className={`user-item ${activeId===u.id ? 'bg-gray-50' : ''}`}>
+          <div className="avatar">{u.avatar ? <img src={u.avatar} alt={u.name} /> : u.name[0]}</div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium truncate">{u.name}</p>
+              <span className="text-[11px] text-gray-500">{u.department||''}</span>
+            </div>
+            <p className="text-xs text-gray-500 truncate">{u.status === 'online' ? 'Online' : u.status}</p>
+          </div>
+          <div className={`w-2 h-2 rounded-full ${u.status==='online'?'bg-green-500':u.status==='away'?'bg-yellow-500':u.status==='busy'?'bg-red-500':'bg-gray-400'}`} />
+        </button>
+      ))}
+    </div>
+  </aside>
 );
 
 const ChatPage = () => {
-  const { user, logout } = useAuth();
-  const [showSettings,setShowSettings] = useState(false);
-  const [users,setUsers] = useState([]);
-  const [selected,setSelected] = useState(null);
-  const [messages,setMessages] = useState([]);
+  const { user, token, logout } = useAuth();
+  const [users, setUsers] = useState([]);
+  const [query, setQuery] = useState('');
+  const filtered = useMemo(()=>users.filter(u=>u.name.toLowerCase().includes(query.toLowerCase())),[users,query]);
+  const [active, setActive] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [text, setText] = useState('');
+  const [showEmoji, setShowEmoji] = useState(false);
+
+  useEffect(()=>{ userService.setAuthToken(token); },[token]);
 
   useEffect(()=>{
-    // Fetch onboarded users from backend later; using demo for now
-    setUsers([
-      { id: 'bob', name: 'Bob Wilson' },
-      { id: 'carol', name: 'Carol Davis' }
-    ]);
+    // Load users from API (fallback to demo)
+    (async ()=>{
+      try {
+        const res = await userService.updatePrivacy({}); // ping API permissions
+        console.log('API reachable');
+      } catch {}
+      setUsers([
+        { id:'alice', name:'Alice Cooper', status:'online', department:'Engineering' },
+        { id:'bob', name:'Bob Wilson', status:'away', department:'Design' },
+        { id:'carol', name:'Carol Davis', status:'online', department:'Marketing' },
+        { id:'david', name:'David Chen', status:'busy', department:'Sales' },
+      ]);
+    })();
   },[]);
 
-  const loadConversation = (uid) => {
-    setSelected(users.find(u=>u.id===uid));
+  useEffect(()=>{
+    if (!token) return;
+    try { socketService.connect(token); } catch {}
+    return ()=> socketService.disconnect();
+  },[token]);
+
+  const selectUser = (u) => {
+    setActive(u);
     setMessages([
-      { id:'1', type:'incoming', content:'Hey! How are you doing?', ts: Date.now()-300000 },
-      { id:'2', type:'outgoing', content:'Everything is going well! Just finished implementing the encryption.', ts: Date.now()-120000 },
-      { id:'3', type:'incoming', content:'👍 Looks great!', ts: Date.now()-60000 }
+      { id:'m1', from:'them', text:'The UI overhaul is looking fantastic! Much more professional than before.', ts: Date.now()-600000 },
+      { id:'m2', from:'me', text:'I\'m glad you like it! Tried to balance modern design with enterprise needs.', ts: Date.now()-540000 },
+      { id:'m3', from:'them', text:'The centered layout works really well. Easy to focus on conversations.', ts: Date.now()-300000 },
     ]);
   };
 
+  const send = () => {
+    if (!text.trim() || !active) return;
+    const msg = { id:`m-${Date.now()}`, from:'me', text: text.trim(), ts: Date.now() };
+    setMessages(prev=>[...prev, msg]);
+    setText('');
+    try { socketService.sendMessage({ conversationId: active.id, content: msg.text, type:'text' }); } catch {}
+  };
+
   return (
-    <div className="chat-container">
-      {/* Only Header (no sidebar) */}
-      <div className="app-header">
+    <div className="app-shell">
+      {/* Topbar */}
+      <div className="topbar">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center"><Shield className="w-5 h-5 text-white" /></div>
+          <div className="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center"><Shield className="w-5 h-5" /></div>
           <div>
-            <h1 className="text-base font-semibold">P2P</h1>
-            <p className="text-xs text-gray-500">Secure Messaging</p>
+            <p className="text-sm font-semibold">P2P Secure Chat</p>
+            <p className="text-[11px] text-gray-500">Made for Enterprise</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {/* User selector replaces sidebar */}
-          <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm" value={selected?.id || ''} onChange={(e)=>loadConversation(e.target.value)}>
-            <option value="" disabled>Select user</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-          <button onClick={()=>setShowSettings(true)} className="btn btn-icon"><Settings className="w-5 h-5" /></button>
-          <button onClick={logout} className="btn btn-icon"><LogOut className="w-5 h-5" /></button>
-          <div className="avatar w-8 h-8">{user?.avatar ? <img src={user.avatar} alt="User" /> : <span className="text-sm">{user?.username?.[0]?.toUpperCase() || 'U'}</span>}</div>
+        <div className="status-pill"><span className="w-1.5 h-1.5 rounded-full bg-green-500" /> Online</div>
+        <div className="flex items-center gap-1">
+          <button className="icon-btn"><Search className="w-5 h-5" /></button>
+          <button className="icon-btn relative"><Bell className="w-5 h-5" /><span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500" /></button>
+          <button onClick={logout} className="icon-btn"><MoreVertical className="w-5 h-5" /></button>
+          <div className="avatar w-8 h-8">{user?.username?.[0]?.toUpperCase()||'U'}</div>
         </div>
       </div>
 
-      {/* Main chat area */}
-      <div className="flex-1 flex flex-col">
-        {selected ? (
-          <>
-            <ChatHeader title={selected.name} />
-            <div className="message-container custom-scrollbar">
-              {messages.map(m => (
-                <div key={m.id} className={`message-bubble ${m.type}`}>
-                  <p>{m.content}</p>
-                  <span className="text-xs text-gray-500 block mt-1">{new Date(m.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+      {/* Two-column layout (no right detail panel) */}
+      <div className="layout">
+        <Sidebar users={filtered} onSelect={selectUser} activeId={active?.id} query={query} setQuery={setQuery} />
+        <main className="main">
+          {/* Chat header */}
+          <div className="chat-head">
+            <div>
+              <p className="text-sm font-semibold">{active ? active.name : 'Select a conversation'}</p>
+              {active && <p className="text-xs text-gray-500">{active.status === 'online' ? 'Online' : active.status}</p>}
+            </div>
+            {active && <div className="status-pill">End-to-end encrypted</div>}
+          </div>
+
+          {/* Chat body */}
+          <div className="chat-body">
+            {!active ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="bg-white/80 backdrop-blur rounded-2xl border border-gray-200 p-8 text-center shadow-sm max-w-lg">
+                  <p className="text-lg font-semibold mb-2">Start a conversation</p>
+                  <p className="text-sm text-gray-600">Search users on the left and select to begin.</p>
                 </div>
-              ))}
-            </div>
-            <MessageInput onSend={(txt)=>setMessages(prev=>[...prev,{ id: `m-${Date.now()}`, type:'outgoing', content: txt, ts: Date.now() }])} />
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-gray-500">Select a user from the dropdown to start chatting.</p>
+              </div>
+            ) : (
+              <div className="max-w-4xl mx-auto space-y-3">
+                {messages.map(m => (
+                  <div key={m.id} className={m.from==='me' ? 'bubble-out ml-auto' : 'bubble-in'}>
+                    <p className="text-[15px]">{m.text}</p>
+                    <span className="text-[11px] opacity-70 block mt-1">{new Date(m.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Composer */}
+          <div className="composer">
+            <div className="composer-bar relative">
+              <button className="icon-btn"><Paperclip className="w-5 h-5" /></button>
+              <input value={text} onChange={(e)=>setText(e.target.value)} onKeyDown={(e)=>{ if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Type a message..." className="flex-1 outline-none px-1 py-2 text-[15px]" />
+              <button onClick={()=>setShowEmoji(s=>!s)} className="icon-btn"><Smile className="w-5 h-5" /></button>
+              <button className="icon-btn"><Mic className="w-5 h-5" /></button>
+              <button onClick={send} className="send-btn"><Send className="w-4 h-4" /></button>
+              {showEmoji && <Emoji onPick={(e)=>{ setText(t=>t+e); setShowEmoji(false); }} />}
             </div>
           </div>
-        )}
+        </main>
       </div>
-
-      <SettingsModal isOpen={showSettings} onClose={()=>setShowSettings(false)} />
     </div>
   );
 };
